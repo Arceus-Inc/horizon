@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# venv / uv
+.venv/
+uv.lock
+
+# type/test caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+coverage.xml
+
+# horizon runtime state — the git-backed strategy store + any local db are now-state, not committed
+.horizon/
+*.db
+*.db-wal
+*.db-shm
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

@@ -10,4 +10,7 @@ Lands in M2: ``_decomposer.py``.
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from horizon.planning._decomposer import Decomposer
+from horizon.planning._reasoner import CompletionResult, Reasoner
+
+__all__ = ["CompletionResult", "Decomposer", "Reasoner"]

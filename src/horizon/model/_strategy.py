@@ -12,7 +12,13 @@ from dataclasses import dataclass, field
 
 @dataclass
 class StrategyRecord:
-    """The rich, strategy-only facts about one goal (merged with chorus's skeleton at read time)."""
+    """The per-goal horizon state (merged with chorus's skeleton at read time).
+
+    Holds the strategy-only fields chorus never sees (``score`` / ``health`` / ``metric`` / ``target`` /
+    ``evidence``) plus the bookkeeping horizon needs to close the loop: the owning ``decision_id``, the
+    ``task_id`` currently realizing the goal, and the landed-outcome counters (``passes`` / ``fails`` /
+    ``last_outcome_at``) the health + drift signal is computed from.
+    """
 
     goal_id: str
     score: float = 0.0
@@ -20,3 +26,9 @@ class StrategyRecord:
     metric: str | None = None
     target: str | None = None
     evidence: list[str] = field(default_factory=list)
+    decision_id: str | None = None  # the horizon-only decision this goal decomposed from
+    task_id: str | None = None  # the chorus task currently realizing this goal (set at submit)
+    passes: int = 0  # landed DoD passes (drift input)
+    fails: int = 0  # landed DoD fails (drift input)
+    last_outcome_at: str | None = None  # ISO ts of the last landed outcome (staleness input)
+

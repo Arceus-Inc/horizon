@@ -13,3 +13,7 @@ class UnknownDecision(HorizonError):
 
 class UnknownGoal(HorizonError):
     """Raised when a goal id is not found (neither in the seam skeleton nor the strategy store)."""
+
+
+class DecompositionError(HorizonError):
+    """Raised when the LLM decomposition output cannot be parsed into at least one valid goal."""

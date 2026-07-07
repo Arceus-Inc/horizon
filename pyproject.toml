@@ -85,3 +85,6 @@ disallow_untyped_defs = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+  "live: hits a real LLM/chorus; skips cleanly without creds (run with -m live)",
+]

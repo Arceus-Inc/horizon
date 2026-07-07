@@ -34,3 +34,6 @@ coverage.xml
 *.swp
 .DS_Store
 Thumbs.db
+
+# chorus runtime state created by live demos
+.chorus/

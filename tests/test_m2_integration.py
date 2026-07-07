@@ -90,3 +90,35 @@ def test_full_loop_reprioritises_real_task_on_a_real_outcome(tmp_path, chorus):
     assert after.score == 0.45  # 0.9 * 0.5 decay
     # the real chorus task was re-prioritised high -> medium by horizon
     assert chorus._ledger.tasks.get(task_id).priority.value == "medium"
+
+
+def test_bridge_maps_real_evaluator_outcome_to_passed(tmp_path, chorus):
+    # A REAL chorus RUN_EVALUATED carries dream's verdict as ``outcome`` (pass/fail), not a boolean —
+    # the bridge must map it, or real beats would never move health. Pins that mapping.
+    strategy = StrategyStore(tmp_path / "strategy.json")
+    decisions = DecisionStore(tmp_path / "decisions.json")
+    horizon = Horizon(
+        goals=ChorusGoalStore(chorus),
+        intake=ChorusIntakePort(chorus),
+        outcomes=ChorusOutcomeFeed(chorus),
+        decisions=decisions,
+        strategy=strategy,
+    )
+    decisions.put(Decision(id="dec_1", statement="investigate", goal_ids=["g1"]))
+    ChorusGoalStore(chorus).upsert(GoalNode(id="g1", title="Investigate", level="goal"))
+    strategy.put(StrategyRecord(goal_id="g1", score=0.8, decision_id="dec_1"))
+    task_id = horizon.submit_goal(horizon.goal_view("g1"))
+    horizon.start()
+
+    chorus._event_bus.emit(
+        Event(
+            kind=EventKind.RUN_EVALUATED,
+            at=datetime.now(UTC),
+            task_id=task_id,
+            payload={"outcome": "pass", "score": 1.0},  # no boolean "passed" — the real shape
+        )
+    )
+
+    after = horizon.goal_view("g1")
+    assert after.health == "on_track"  # outcome="pass" -> passed=True
+    assert after.score == 0.4  # 0.8 * 0.5

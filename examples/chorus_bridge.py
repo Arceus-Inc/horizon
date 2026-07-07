@@ -168,6 +168,14 @@ class ChorusOutcomeFeed:
         payload = event.payload
         status = payload.get("status")
         passed = payload.get("passed")
+        if passed is None:
+            # a real chorus RUN_EVALUATED carries dream's evaluator verdict as ``outcome`` (pass|fail|
+            # needs-changes), not a boolean — map it; a non-terminal "needs-changes" stays None (dropped).
+            outcome = payload.get("outcome")
+            if outcome == "pass":
+                passed = True
+            elif outcome == "fail":
+                passed = False
         return OutcomeEvent(
             kind=kind,
             task_id=event.task_id,

@@ -10,4 +10,14 @@ Lands in M2: ``_submitter.py``, ``_prioritiser.py``, ``_fingerprint.py``.
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from horizon.intake._fingerprint import fingerprint, normalize_intent
+from horizon.intake._prioritiser import Prioritiser, ScorePolicy
+from horizon.intake._submitter import Submitter
+
+__all__ = [
+    "Prioritiser",
+    "ScorePolicy",
+    "Submitter",
+    "fingerprint",
+    "normalize_intent",
+]

@@ -47,7 +47,7 @@ def _to_level(level: str) -> GoalLevel:
     try:
         return GoalLevel(level)
     except ValueError:
-        return GoalLevel.OBJECTIVE
+        return GoalLevel.GOAL
 
 
 def _to_node(goal: Goal) -> GoalNode:

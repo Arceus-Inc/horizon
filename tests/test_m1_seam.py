@@ -37,9 +37,9 @@ def test_adapters_satisfy_the_ports(chorus):
 
 def test_goal_tree_round_trip(chorus):
     store = ChorusGoalStore(chorus)
-    store.upsert(GoalNode(id="g_root", title="Ship budget tracker", level="objective"))
+    store.upsert(GoalNode(id="g_root", title="Ship budget tracker", level="goal"))
     store.upsert(
-        GoalNode(id="g_leaf", title="build the app", level="task_intent", parent_id="g_root")
+        GoalNode(id="g_leaf", title="build the app", level="goal", parent_id="g_root")
     )
 
     root = store.get("g_root")
@@ -49,7 +49,7 @@ def test_goal_tree_round_trip(chorus):
 
     # update path (upsert on an existing id)
     store.upsert(
-        GoalNode(id="g_root", title="Ship budget tracker v2", level="objective", status="paused")
+        GoalNode(id="g_root", title="Ship budget tracker v2", level="goal", status="paused")
     )
     updated = store.get("g_root")
     assert updated is not None
@@ -59,7 +59,7 @@ def test_goal_tree_round_trip(chorus):
 
 def test_intake_is_idempotent_and_linked(chorus):
     store = ChorusGoalStore(chorus)
-    store.upsert(GoalNode(id="g_leaf", title="build the app", level="task_intent"))
+    store.upsert(GoalNode(id="g_leaf", title="build the app", level="goal"))
     intake = ChorusIntakePort(chorus)
 
     first = intake.submit("build the app", goal_id="g_leaf", origin_fingerprint="fp-1")
@@ -77,7 +77,7 @@ def test_intake_is_idempotent_and_linked(chorus):
 
 def test_outcome_feed_translates_events(chorus):
     store = ChorusGoalStore(chorus)
-    store.upsert(GoalNode(id="g_leaf", title="build", level="task_intent"))
+    store.upsert(GoalNode(id="g_leaf", title="build", level="goal"))
     intake = ChorusIntakePort(chorus)
     task_id = intake.submit("build", goal_id="g_leaf", origin_fingerprint="fp-x")
 

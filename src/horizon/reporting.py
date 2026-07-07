@@ -15,6 +15,7 @@ from horizon.intake._prioritiser import ScorePolicy
 from horizon.model import Decision, DecisionState, Goal
 from horizon.model._strategy import StrategyRecord
 from horizon.ports import OutcomeEvent
+from horizon.store import DecisionStore, StrategyStore
 
 
 @dataclass(frozen=True)
@@ -181,4 +182,39 @@ def render_direction(states: list[DecisionState]) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["LoopReporter", "Submission", "Transition", "render_direction"]
+def direction_from_records(
+    decisions: DecisionStore, strategy: StrategyStore
+) -> list[DecisionState]:
+    """Build the direction read model from horizon's own stores alone (offline; uses cached titles)."""
+    by_goal = {record.goal_id: record for record in strategy.all()}
+    states: list[DecisionState] = []
+    for decision in decisions.all():
+        goals: list[Goal] = []
+        for goal_id in decision.goal_ids:
+            record = by_goal.get(goal_id)
+            if record is None:
+                continue
+            goals.append(
+                Goal(
+                    id=record.goal_id,
+                    title=record.title or record.goal_id,
+                    decision_id=record.decision_id,
+                    score=record.score,
+                    health=record.health,
+                    metric=record.metric,
+                    target=record.target,
+                    evidence=list(record.evidence),
+                    task_id=record.task_id,
+                )
+            )
+        states.append(DecisionState(decision=decision, goals=goals))
+    return states
+
+
+__all__ = [
+    "LoopReporter",
+    "Submission",
+    "Transition",
+    "direction_from_records",
+    "render_direction",
+]

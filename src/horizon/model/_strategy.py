@@ -21,6 +21,7 @@ class StrategyRecord:
     """
 
     goal_id: str
+    title: str = ""  # cached display title (chorus owns the canonical one; this makes reads offline-safe)
     score: float = 0.0
     health: str = "unknown"  # on_track | drifting | blocked | unknown
     metric: str | None = None

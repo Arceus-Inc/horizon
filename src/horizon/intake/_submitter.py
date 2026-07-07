@@ -36,6 +36,7 @@ class Submitter:
         """Submit ``goal`` (idempotent); return the task id realizing it."""
         record = self._strategy.get(goal.id) or StrategyRecord(
             goal_id=goal.id,
+            title=goal.title,
             score=goal.score,
             metric=goal.metric,
             target=goal.target,

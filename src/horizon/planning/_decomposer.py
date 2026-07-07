@@ -158,6 +158,7 @@ class Decomposer:
             rationale = spec["rationale"]
             record = StrategyRecord(
                 goal_id=goal_id,
+                title=spec["title"],
                 score=spec["score"],
                 metric=spec["metric"],
                 target=spec["target"],

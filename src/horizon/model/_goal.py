@@ -25,3 +25,4 @@ class Goal:
     metric: str | None = None
     target: str | None = None
     evidence: list[str] = field(default_factory=list)
+    task_id: str | None = None  # the chorus task realizing this goal, once submitted

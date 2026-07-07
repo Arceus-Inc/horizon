@@ -10,4 +10,12 @@ Lands in M2: ``_listener.py``, ``_health.py``.
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from horizon.feedback._health import HealthPolicy, apply_outcome, staleness_health
+from horizon.feedback._listener import OutcomeListener
+
+__all__ = [
+    "HealthPolicy",
+    "OutcomeListener",
+    "apply_outcome",
+    "staleness_health",
+]

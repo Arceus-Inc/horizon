@@ -7,16 +7,20 @@ it is idempotent. Submits with no assignee so it needs no hired employee (the M3
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import dream
 import pytest
+from chorus.events import Event, EventKind
 from chorus.facade import Chorus
-from examples.chorus_bridge import ChorusGoalStore, ChorusIntakePort
+from examples.chorus_bridge import ChorusGoalStore, ChorusIntakePort, ChorusOutcomeFeed
 
+from horizon import Horizon
 from horizon.intake import Submitter
-from horizon.model import Goal
+from horizon.model import Decision, Goal
 from horizon.model._strategy import StrategyRecord
 from horizon.ports import GoalNode
-from horizon.store import StrategyStore
+from horizon.store import DecisionStore, StrategyStore
 
 
 @pytest.fixture
@@ -50,3 +54,39 @@ def test_submitter_opens_a_linked_prioritised_task_in_chorus(tmp_path, chorus):
     # idempotent through the real dedup path
     assert submitter.submit(goal) == task_id
     assert strategy.get("goal_x").task_id == task_id
+
+
+def test_full_loop_reprioritises_real_task_on_a_real_outcome(tmp_path, chorus):
+    # Wire horizon over the real chorus bridge (no reasoner — we seed the goal by hand here).
+    strategy = StrategyStore(tmp_path / "strategy.json")
+    decisions = DecisionStore(tmp_path / "decisions.json")
+    horizon = Horizon(
+        goals=ChorusGoalStore(chorus),
+        intake=ChorusIntakePort(chorus),
+        outcomes=ChorusOutcomeFeed(chorus),
+        decisions=decisions,
+        strategy=strategy,
+    )
+    decisions.put(Decision(id="dec_1", statement="ship it", goal_ids=["g1"]))
+    ChorusGoalStore(chorus).upsert(GoalNode(id="g1", title="Build the thing", level="goal"))
+    strategy.put(StrategyRecord(goal_id="g1", score=0.9, decision_id="dec_1"))
+
+    task_id = horizon.submit_goal(horizon.goal_view("g1"))
+    assert chorus._ledger.tasks.get(task_id).priority.value == "high"  # score 0.9
+
+    horizon.start()
+    # A real chorus DoD verdict (passed) flows through the bridge -> listener -> re-priority.
+    chorus._event_bus.emit(
+        Event(
+            kind=EventKind.RUN_EVALUATED,
+            at=datetime.now(UTC),
+            task_id=task_id,
+            payload={"passed": True},
+        )
+    )
+
+    after = horizon.goal_view("g1")
+    assert after.health == "on_track"
+    assert after.score == 0.45  # 0.9 * 0.5 decay
+    # the real chorus task was re-prioritised high -> medium by horizon
+    assert chorus._ledger.tasks.get(task_id).priority.value == "medium"

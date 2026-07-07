@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from horizon.model._decision import Decision
 from horizon.model._goal import Goal
+from horizon.model._state import DecisionState
 from horizon.model._strategy import StrategyRecord
 
-__all__ = ["Decision", "Goal", "StrategyRecord"]
+__all__ = ["Decision", "DecisionState", "Goal", "StrategyRecord"]

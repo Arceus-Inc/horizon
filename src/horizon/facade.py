@@ -16,7 +16,7 @@ from collections.abc import Callable
 
 from horizon.errors import HorizonError, UnknownDecision
 from horizon.feedback._health import HealthPolicy
-from horizon.feedback._listener import OutcomeListener
+from horizon.feedback._listener import Observer, OutcomeListener
 from horizon.intake._prioritiser import Prioritiser, ScorePolicy
 from horizon.intake._submitter import Submitter
 from horizon.model import Decision, Goal
@@ -42,6 +42,7 @@ class Horizon:
         default_assignee: str | None = None,
         score_policy: ScorePolicy | None = None,
         health_policy: HealthPolicy | None = None,
+        outcome_observer: Observer | None = None,
         model: str | None = None,
     ) -> None:
         self._goals = goals
@@ -74,6 +75,7 @@ class Horizon:
             strategy=self._strategy,
             prioritiser=self._prioritiser,
             policy=health_policy,
+            observer=outcome_observer,
         )
 
     # -- direction (writes) ---------------------------------------------------

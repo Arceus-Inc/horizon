@@ -121,7 +121,7 @@ class Decomposer:
         decisions: DecisionStore,
         reasoner: Reasoner,
         model: str | None = None,
-        max_output_tokens: int = 1500,
+        max_output_tokens: int = 8000,
     ) -> None:
         self._goals = goals
         self._strategy = strategy

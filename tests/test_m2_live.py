@@ -38,7 +38,11 @@ def test_live_decompose_produces_quality_goals(tmp_path):
     decisions = DecisionStore(tmp_path / "decisions.json")
     strategy = StrategyStore(tmp_path / "strategy.json")
     decomposer = Decomposer(
-        goals=FakeGoalStore(), strategy=strategy, decisions=decisions, reasoner=substrate
+        goals=FakeGoalStore(),
+        strategy=strategy,
+        decisions=decisions,
+        reasoner=substrate,
+        max_output_tokens=16000,
     )
     decisions.put(
         Decision(

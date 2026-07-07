@@ -36,6 +36,9 @@ dev = [
   # example (examples/chorus_bridge.py) and the M1 seam test only — the one place allowed to import
   # both chorus's concretes and horizon's dream.contracts ports.
   "chorus",
+  # openai backs dream's OpenAIChatSubstrate (the real Reasoner) for the composition root + live tests.
+  # The SDK core depends only on the Reasoner Protocol, never on openai directly.
+  "openai>=1.40",
 ]
 
 [project.scripts]

@@ -133,7 +133,7 @@ class Horizon:
             title=node.title,
             decision_id=record.decision_id if record else None,
             parent_id=node.parent_id,
-            status=node.status,
+            status="done" if record and record.done else node.status,
             owner=node.owner,
             score=record.score if record else 0.0,
             health=record.health if record else "unknown",

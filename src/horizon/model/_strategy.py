@@ -32,4 +32,5 @@ class StrategyRecord:
     passes: int = 0  # landed DoD passes (drift input)
     fails: int = 0  # landed DoD fails (drift input)
     last_outcome_at: str | None = None  # ISO ts of the last landed outcome (staleness input)
+    done: bool = False  # a passing DoD landed — in v1 (one task per goal) the goal's work is done
 

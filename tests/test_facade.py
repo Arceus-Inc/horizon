@@ -87,6 +87,20 @@ def test_start_then_failed_outcome_updates_state_and_priority(tmp_path):
     assert intake.priorities[goal.task_id] == "high"
 
 
+def test_passing_outcome_marks_goal_done_in_state(tmp_path):
+    text = json.dumps({"goals": [{"title": "Build API", "score": 0.9}]})
+    horizon, _, _, feed = _horizon(tmp_path, text)
+    horizon.seed_decision(Decision(id="dec_1", statement="x", owner="moe"))
+    horizon.decompose("dec_1")
+    horizon.submit_decision("dec_1")
+    horizon.start()
+
+    goal = horizon.state()[0].goals[0]
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=True))
+
+    assert horizon.state()[0].goals[0].status == "done"
+
+
 def test_decompose_without_reasoner_raises(tmp_path):
     horizon = Horizon(
         goals=FakeGoalStore(),

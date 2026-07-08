@@ -83,3 +83,40 @@ def test_stop_unsubscribes(tmp_path):
 
     assert listener.handled == 0
     assert strategy.get("g1").health == "unknown"
+
+
+def test_counters_classify_every_event(tmp_path):
+    listener, feed, _, _ = _wire(
+        tmp_path, StrategyRecord(goal_id="g1", score=0.8, task_id="task_1")
+    )
+    listener.start()
+
+    # non-outcome kinds -> ignored silently (no counter moves)
+    feed.emit(OutcomeEvent(kind="run.tool_use", task_id="task_1", goal_id="g1"))
+    feed.emit(OutcomeEvent(kind="run.done", task_id="task_1", goal_id="g1"))
+    # verdict-kind but no pass/fail yet (needs-changes) -> deferred
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=None))
+    # a verdict for a goal horizon does not own -> dropped
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="tX", goal_id="other", passed=True))
+    # a real verdict -> handled
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=True))
+
+    assert (listener.handled, listener.dropped, listener.deferred) == (1, 1, 1)
+
+
+def test_pass_marks_goal_done(tmp_path):
+    listener, feed, strategy, _ = _wire(
+        tmp_path, StrategyRecord(goal_id="g1", score=0.8, task_id="task_1")
+    )
+    listener.start()
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=True))
+    assert strategy.get("g1").done is True
+
+
+def test_fail_does_not_mark_done(tmp_path):
+    listener, feed, strategy, _ = _wire(
+        tmp_path, StrategyRecord(goal_id="g1", score=0.6, task_id="task_1")
+    )
+    listener.start()
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=False))
+    assert strategy.get("g1").done is False

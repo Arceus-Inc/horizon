@@ -72,6 +72,7 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["B", "SIM"]
+"examples/strong_run.py" = ["RUF001", "RUF003"]  # deliberate unicode (→, ×) in the rendered report
 
 [tool.mypy]
 python_version = "3.11"

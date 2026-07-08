@@ -199,6 +199,7 @@ def direction_from_records(
                     id=record.goal_id,
                     title=record.title or record.goal_id,
                     decision_id=record.decision_id,
+                    status="done" if record.done else "active",
                     score=record.score,
                     health=record.health,
                     metric=record.metric,

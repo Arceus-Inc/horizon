@@ -48,12 +48,15 @@ horizon = Horizon(
     outcomes=outcome_feed,   # a dream.contracts.OutcomeFeed (adapts chorus's event bus)
     reasoner=substrate,      # an LLM complete() — dream's OpenAIChatSubstrate, or a fake
     default_assignee="moe",
+    decompose_context="the data/resources the org actually has",  # grounds decomposition
 )
 horizon.seed_decision(decision)
-horizon.decompose(decision.id)     # LLM: decision -> goals
+horizon.decompose(decision.id)     # LLM: decision -> goals (retries once, grounded in context)
 horizon.submit_decision(decision.id)
-horizon.start()                    # subscribe: outcomes -> health -> re-priority
+horizon.start()                    # subscribe: outcomes -> health + done -> re-priority
+horizon.sweep_staleness()          # decay trust in goals verified long ago (call on a tick)
 horizon.state()                    # the current direction (read model)
+horizon.listener_stats()           # proof the event wiring is live (handled/dropped/deferred)
 ```
 
 ## Demos + reports
@@ -67,6 +70,15 @@ uv run python examples/demo_live.py      # real LLM + a real one-employee Analys
 
 - [`reports/offline-demo-report.md`](reports/offline-demo-report.md) — the loop end-to-end, showing back-pressure surface a failed goal above the passed ones.
 - [`reports/live-demo-report.md`](reports/live-demo-report.md) — a real LLM decomposition + a real Analyst beat's DoD verdict closing the loop.
+- [`reports/strong-test/horizon-flow-report.html`](reports/strong-test/horizon-flow-report.html) — the instrumented capstone: every horizon decision with the raw LLM prompt + completion, the score→priority + health arithmetic, real DoD verdicts across multiple beats, and the artifacts the employee chose to produce.
+
+## Robustness
+
+The decompose + feedback loop is hardened to survive real runs:
+
+- **Observable listeners** — every landed event is classified into `handled` / `dropped` / `deferred`; `listener_stats()` proves the event wiring is live, never silently dropping.
+- **Grounded, resilient decomposition** — the decomposer retries once on malformed JSON, tolerates a bare array, dedups goals by title, and is grounded in `decompose_context` so it never invents resources the org lacks.
+- **Back-pressure that converges** — a failed DoD surfaces a goal (score up, `blocked`); a passing DoD marks it `done` and decays it; `sweep_staleness()` decays trust in goals verified long ago (re-opens + resurfaces them).
 
 ## Architecture
 

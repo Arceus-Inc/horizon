@@ -61,6 +61,15 @@ _BRIEF = (
     "clear, defensible, and reproducible for an executive audience — the format is your call."
 )
 
+# The org's real resources, fed to horizon's decomposition so it grounds goals in what actually exists
+# (the same facts as the brief, from the composition root). This is horizon's generic grounding lever.
+_CONTEXT = (
+    "The team's only data source is `warehouse.db` (SQLite) with tables "
+    "sales(region, quarter, revenue, units) and costs(region, quarter, cost), covering Q1-Q3 for "
+    "regions A, B, and C. There is NO CRM, no pipeline or conversion data, no headcount or capacity "
+    "data, and no external data. Every goal must be answerable from this warehouse alone."
+)
+
 _SALES = [
     ("A", "Q1", 1000, 100), ("A", "Q2", 1200, 110), ("A", "Q3", 1500, 130),
     ("B", "Q1", 800, 90), ("B", "Q2", 900, 95), ("B", "Q3", 1100, 105),
@@ -219,6 +228,7 @@ async def run() -> dict[str, Any]:
         model=deployment,
         score_policy=score_policy,
         health_policy=health_policy,
+        decompose_context=_CONTEXT,
         outcome_observer=reporter.observe,
     )
 

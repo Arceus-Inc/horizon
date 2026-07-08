@@ -110,3 +110,18 @@ class FakeSubstrate:
     def complete(self, prompt: str, params: dict[str, Any] | None = None) -> CompletionResult:
         self.calls.append(prompt)
         return CompletionResult(text=self._text)
+
+
+class SequenceSubstrate:
+    """A ``Reasoner`` that returns a scripted sequence of completions (the last one repeats)."""
+
+    name = "sequence"
+
+    def __init__(self, texts: list[str]) -> None:
+        self._texts = list(texts)
+        self.calls: list[str] = []
+
+    def complete(self, prompt: str, params: dict[str, Any] | None = None) -> CompletionResult:
+        self.calls.append(prompt)
+        index = min(len(self.calls) - 1, len(self._texts) - 1)
+        return CompletionResult(text=self._texts[index])

@@ -41,6 +41,13 @@ DECISION:
 __STATEMENT__
 """
 
+_MAX_GOALS = 12  # a defensive cap; the prompt asks for 2-6
+_RETRY_SUFFIX = (
+    "\n\nIMPORTANT: your previous reply could not be parsed. Reply with STRICT JSON ONLY — exactly "
+    '{"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0}]} '
+    "— no prose, no markdown, no code fences."
+)
+
 
 def _build_prompt(decision: Decision) -> str:
     return _PROMPT.replace("__STATEMENT__", decision.statement.strip())
@@ -56,8 +63,13 @@ def _extract_json(text: str) -> str:
                 stripped = candidate
                 break
     start, end = stripped.find("{"), stripped.rfind("}")
-    if start != -1 and end > start:
-        return stripped[start : end + 1]
+    # take the outermost JSON value — an object {...} or a bare array [...]
+    starts = [i for i in (start, stripped.find("[")) if i != -1]
+    ends = [i for i in (end, stripped.rfind("]")) if i != -1]
+    if starts and ends:
+        start, end = min(starts), max(ends)
+        if end > start:
+            return stripped[start : end + 1]
     return stripped
 
 
@@ -86,16 +98,26 @@ def _parse_goals(text: str) -> list[dict[str, Any]]:
         data = json.loads(_extract_json(text))
     except json.JSONDecodeError as exc:
         raise DecompositionError(f"model output was not valid JSON: {exc}") from exc
-    raw = data.get("goals") if isinstance(data, dict) else None
+    if isinstance(data, list):
+        raw: object = data  # the model sometimes returns a bare [...] array
+    elif isinstance(data, dict):
+        raw = data.get("goals")
+    else:
+        raw = None
     if not isinstance(raw, list) or not raw:
         raise DecompositionError("model returned no 'goals' array")
     goals: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for item in raw:
         if not isinstance(item, dict):
             continue
         title = str(item.get("title", "")).strip()
         if not title:
             continue
+        key = " ".join(title.lower().split())  # dedup by normalized title
+        if key in seen:
+            continue
+        seen.add(key)
         goals.append(
             {
                 "title": title,
@@ -107,7 +129,7 @@ def _parse_goals(text: str) -> list[dict[str, Any]]:
         )
     if not goals:
         raise DecompositionError("model output contained no valid goals (all missing a title)")
-    return goals
+    return goals[:_MAX_GOALS]
 
 
 class Decomposer:
@@ -139,8 +161,14 @@ class Decomposer:
         params: dict[str, Any] = {"max_tokens": self._max_output_tokens}
         if self._model is not None:
             params["model"] = self._model
-        result = self._reasoner.complete(_build_prompt(decision), params)
-        specs = _parse_goals(result.text)
+        prompt = _build_prompt(decision)
+        result = self._reasoner.complete(prompt, params)
+        try:
+            specs = _parse_goals(result.text)
+        except DecompositionError:
+            # one bounded retry with a stricter reminder — LLMs occasionally wrap or truncate JSON
+            retry = self._reasoner.complete(prompt + _RETRY_SUFFIX, params)
+            specs = _parse_goals(retry.text)
 
         goals: list[Goal] = []
         new_ids: list[str] = []

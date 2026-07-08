@@ -10,7 +10,7 @@ from horizon.errors import DecompositionError, UnknownDecision
 from horizon.model import Decision
 from horizon.planning import Decomposer
 from horizon.store import DecisionStore, StrategyStore
-from tests.fakes import FakeGoalStore, FakeSubstrate
+from tests.fakes import FakeGoalStore, FakeSubstrate, SequenceSubstrate
 
 
 def _decomposer(tmp_path, text):
@@ -121,3 +121,57 @@ def test_decompose_tolerates_fenced_json(tmp_path):
 
     out = decomposer.decompose("dec_1")
     assert [g.title for g in out] == ["Only goal"]
+
+
+def test_decompose_tolerates_top_level_array(tmp_path):
+    text = json.dumps([{"title": "A", "score": 0.9}, {"title": "B", "score": 0.5}])
+    decomposer, decisions, _, _, _ = _decomposer(tmp_path, text)
+    decisions.put(Decision(id="dec_1", statement="x"))
+
+    out = decomposer.decompose("dec_1")
+    assert [g.title for g in out] == ["A", "B"]
+
+
+def test_decompose_dedups_by_normalized_title(tmp_path):
+    text = json.dumps(
+        {"goals": [{"title": "Build API", "score": 0.9}, {"title": "build   api", "score": 0.4}]}
+    )
+    decomposer, decisions, _, _, _ = _decomposer(tmp_path, text)
+    decisions.put(Decision(id="dec_1", statement="x"))
+
+    out = decomposer.decompose("dec_1")
+    assert [g.title for g in out] == ["Build API"]
+
+
+def test_decompose_retries_once_then_succeeds(tmp_path):
+    good = json.dumps({"goals": [{"title": "A", "score": 0.9}]})
+    reasoner = SequenceSubstrate(["not json at all", good])
+    decisions = DecisionStore(tmp_path / "decisions.json")
+    decomposer = Decomposer(
+        goals=FakeGoalStore(),
+        strategy=StrategyStore(tmp_path / "strategy.json"),
+        decisions=decisions,
+        reasoner=reasoner,
+    )
+    decisions.put(Decision(id="dec_1", statement="x"))
+
+    out = decomposer.decompose("dec_1")
+    assert [g.title for g in out] == ["A"]
+    assert len(reasoner.calls) == 2  # retried once
+    assert "STRICT JSON ONLY" in reasoner.calls[1]
+
+
+def test_decompose_retry_then_still_bad_raises(tmp_path):
+    reasoner = SequenceSubstrate(["garbage", "still not json"])
+    decisions = DecisionStore(tmp_path / "decisions.json")
+    decomposer = Decomposer(
+        goals=FakeGoalStore(),
+        strategy=StrategyStore(tmp_path / "strategy.json"),
+        decisions=decisions,
+        reasoner=reasoner,
+    )
+    decisions.put(Decision(id="dec_1", statement="x"))
+
+    with pytest.raises(DecompositionError):
+        decomposer.decompose("dec_1")
+    assert len(reasoner.calls) == 2

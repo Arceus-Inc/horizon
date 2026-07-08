@@ -175,3 +175,21 @@ def test_decompose_retry_then_still_bad_raises(tmp_path):
     with pytest.raises(DecompositionError):
         decomposer.decompose("dec_1")
     assert len(reasoner.calls) == 2
+
+
+def test_decompose_grounds_the_prompt_in_available_context(tmp_path):
+    reasoner = FakeSubstrate(json.dumps({"goals": [{"title": "A", "score": 0.9}]}))
+    decisions = DecisionStore(tmp_path / "decisions.json")
+    decomposer = Decomposer(
+        goals=FakeGoalStore(),
+        strategy=StrategyStore(tmp_path / "strategy.json"),
+        decisions=decisions,
+        reasoner=reasoner,
+        context="Only a warehouse.db with sales + costs tables. No CRM data.",
+    )
+    decisions.put(Decision(id="dec_1", statement="grow profit"))
+
+    decomposer.decompose("dec_1")
+
+    assert "AVAILABLE CONTEXT" in reasoner.calls[0]
+    assert "No CRM data" in reasoner.calls[0]

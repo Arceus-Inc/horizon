@@ -42,6 +42,10 @@ __STATEMENT__
 """
 
 _MAX_GOALS = 12  # a defensive cap; the prompt asks for 2-6
+_CONTEXT_BLOCK = (
+    "\n\nAVAILABLE CONTEXT (the resources / data / constraints the team actually has — only propose "
+    "goals achievable with these; do not invent data sources that are not listed):\n__CONTEXT__\n"
+)
 _RETRY_SUFFIX = (
     "\n\nIMPORTANT: your previous reply could not be parsed. Reply with STRICT JSON ONLY — exactly "
     '{"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0}]} '
@@ -49,8 +53,11 @@ _RETRY_SUFFIX = (
 )
 
 
-def _build_prompt(decision: Decision) -> str:
-    return _PROMPT.replace("__STATEMENT__", decision.statement.strip())
+def _build_prompt(decision: Decision, context: str | None = None) -> str:
+    prompt = _PROMPT.replace("__STATEMENT__", decision.statement.strip())
+    if context:
+        prompt += _CONTEXT_BLOCK.replace("__CONTEXT__", context.strip())
+    return prompt
 
 
 def _extract_json(text: str) -> str:
@@ -144,6 +151,7 @@ class Decomposer:
         reasoner: Reasoner,
         model: str | None = None,
         max_output_tokens: int = 8000,
+        context: str | None = None,
     ) -> None:
         self._goals = goals
         self._strategy = strategy
@@ -151,6 +159,7 @@ class Decomposer:
         self._reasoner = reasoner
         self._model = model
         self._max_output_tokens = max_output_tokens
+        self._context = context
 
     def decompose(self, decision_id: str) -> list[Goal]:
         """Decompose one decision into goals; idempotent-ish (re-running appends fresh goals)."""
@@ -161,7 +170,7 @@ class Decomposer:
         params: dict[str, Any] = {"max_tokens": self._max_output_tokens}
         if self._model is not None:
             params["model"] = self._model
-        prompt = _build_prompt(decision)
+        prompt = _build_prompt(decision, self._context)
         result = self._reasoner.complete(prompt, params)
         try:
             specs = _parse_goals(result.text)

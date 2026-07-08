@@ -45,6 +45,7 @@ class Horizon:
         health_policy: HealthPolicy | None = None,
         outcome_observer: Observer | None = None,
         model: str | None = None,
+        decompose_context: str | None = None,
     ) -> None:
         self._goals = goals
         self._intake = intake
@@ -68,6 +69,7 @@ class Horizon:
                 decisions=self._decisions,
                 reasoner=reasoner,
                 model=model,
+                context=decompose_context,
             )
             if reasoner is not None
             else None

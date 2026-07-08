@@ -228,7 +228,7 @@ async def run() -> dict[str, Any]:
     print("decomposing (real LLM)...")
     goals = horizon.decompose(decision.id)
     reporter.record_decomposition(decision, goals)
-    call = reasoner.calls[0]
+    call = reasoner.calls[-1]
     print(f"  -> {len(goals)} goals ({call['input_tokens']} in / {call['output_tokens']} out tokens)")
 
     ordered = sorted(goals, key=lambda g: g.score, reverse=True)
@@ -325,6 +325,7 @@ async def run() -> dict[str, Any]:
                     "score": goal.score,
                     "priority": score_policy.priority_for(goal.score),
                     "health": goal.health,
+                    "status": goal.status,
                     "task_id": goal.task_id,
                     "executed": goal.task_id is not None,
                 }
@@ -341,6 +342,7 @@ async def run() -> dict[str, Any]:
             "goals_produced": len(goals),
             "goals_executed": len(executions),
             "llm_calls": len(reasoner.calls),
+            "listener": horizon.listener_stats(),
         },
         "decomposition": {
             "prompt": call["prompt"],
@@ -441,13 +443,14 @@ def render_html(data: dict[str, Any]) -> str:
 <p style="color:var(--muted);font-size:13.5px;margin:8px 0 0">The <b>Decision</b> is horizon's strategic anchor (above). horizon decomposes it into goals and submits them; the employee owns the <b>how</b> &mdash; which data to use, what artifacts to produce &mdash; guided by its standing <b>brief</b>. When a goal struggles, horizon's lever is improving the brief or tools, never rewriting the decision.</p>
 <details class="art"><summary>Employee brief &mdash; the context horizon set up (its generic lever)</summary><pre>{_esc(meta['brief'])}</pre></details>
 <div class="overall"><span class="big">LOOP CLOSED</span><p>real LLM decomposition &rarr; {meta['goals_executed']} real Analyst beats &rarr;
-horizon folded {passes + fails} real DoD verdict(s) ({passes} pass / {fails} fail) and re-prioritised every one.</p></div></div>
+horizon folded {passes + fails} real DoD verdict(s) ({passes} pass / {fails} fail) and re-prioritised every one.</p></div>
+<p style="color:var(--muted);font-size:12.5px;margin:10px 0 0"><b>Event listeners</b> (proof the wiring is live): handled {meta['listener']['handled']} &middot; dropped {meta['listener']['dropped']} &middot; deferred {meta['listener']['deferred']} &mdash; every landed event accounted for.</p></div>
 <div class="chips">
 <div class="chip"><span>{meta['goals_produced']}</span>Goals produced (LLM)</div>
 <div class="chip"><span>{meta['goals_executed']}</span>Real beats run</div>
 <div class="chip"><span>{passes}/{fails}</span>Verdicts pass/fail</div>
 <div class="chip"><span>{dec['input_tokens']}&#8202;/&#8202;{dec['output_tokens']}</span>Decompose tokens (in/out)</div>
-<div class="chip"><span>{meta['llm_calls']}</span>LLM calls</div>
+<div class="chip"><span>{meta['listener']['handled']}</span>Verdicts folded (listener)</div>
 </div>"""
     )
 
@@ -549,11 +552,13 @@ horizon folded {passes + fails} real DoD verdict(s) ({passes} pass / {fails} fai
 <h3>Final direction (the read model)</h3>
 <p>The whole decision after the loop — every goal with its current score, priority, health, and realizing task.</p></div></div><div class="phase-body">"""
     )
-    parts.append('<table><tr><th>score</th><th>priority</th><th>health</th><th>goal</th><th>task</th></tr>')
+    parts.append('<table><tr><th>score</th><th>priority</th><th>health</th><th>status</th><th>goal</th><th>task</th></tr>')
     for d in data["direction"]:
+        status = d.get("status", "active")
+        status_cell = '<span class="badge ok">done</span>' if status == "done" else _esc(status)
         parts.append(
             f'<tr><td class="num">{d["score"]:.2f}</td><td>{_esc(d["priority"])}</td>'
-            f'<td>{_esc(d["health"])}</td><td>{_esc(d["title"])}</td>'
+            f'<td>{_esc(d["health"])}</td><td>{status_cell}</td><td>{_esc(d["title"])}</td>'
             f'<td class="mono">{_esc(d["task_id"]) if d["task_id"] else "—"}</td></tr>'
         )
     parts.append("</table></div></section>")

@@ -120,3 +120,25 @@ def test_fail_does_not_mark_done(tmp_path):
     listener.start()
     feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=False))
     assert strategy.get("g1").done is False
+
+
+def test_listener_survives_a_realistic_noisy_stream(tmp_path):
+    # A whole beat's event stream: telemetry noise + a needs-changes sprint + a fail + a final pass.
+    listener, feed, strategy, _ = _wire(
+        tmp_path, StrategyRecord(goal_id="g1", score=0.7, task_id="task_1")
+    )
+    listener.start()
+
+    for kind in ("run.started", "run.text", "run.tool_use", "run.tool_result", "run.text"):
+        feed.emit(OutcomeEvent(kind=kind, task_id="task_1", goal_id="g1"))
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=None))
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=False))
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=True))
+    feed.emit(OutcomeEvent(kind="run.done", task_id="task_1", goal_id="g1"))
+
+    record = strategy.get("g1")
+    assert (record.passes, record.fails) == (1, 1)
+    assert record.health == "on_track"  # converged: the final verdict was a pass
+    assert record.done is True
+    # counters account for every event: 2 verdicts folded, 1 needs-changes deferred, noise ignored
+    assert (listener.handled, listener.deferred, listener.dropped) == (2, 1, 0)

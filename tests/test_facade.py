@@ -112,3 +112,46 @@ def test_decompose_without_reasoner_raises(tmp_path):
     horizon.seed_decision(Decision(id="dec_1", statement="x"))
     with pytest.raises(HorizonError):
         horizon.decompose("dec_1")
+
+
+def test_sweep_staleness_drifts_and_resurfaces_aged_goals(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from horizon.model._strategy import StrategyRecord
+
+    now = datetime(2026, 7, 9, 12, 0, 0, tzinfo=UTC)
+    intake = FakeIntakePort()
+    strategy = StrategyStore(tmp_path / "strategy.json")
+    # a goal verified 2 days ago (on_track + done) with a live task -> should drift
+    strategy.put(
+        StrategyRecord(
+            goal_id="g1", title="Old goal", score=0.30, health="on_track", done=True,
+            task_id="task_1", last_outcome_at=(now - timedelta(days=2)).isoformat(),
+        )
+    )
+    # a goal verified 5 minutes ago -> should NOT drift
+    strategy.put(
+        StrategyRecord(
+            goal_id="g2", title="Fresh goal", score=0.30, health="on_track", done=True,
+            task_id="task_2", last_outcome_at=(now - timedelta(minutes=5)).isoformat(),
+        )
+    )
+    intake.priorities["task_1"] = "low"
+    intake.priorities["task_2"] = "low"
+    horizon = Horizon(
+        goals=FakeGoalStore(),
+        intake=intake,
+        outcomes=FakeOutcomeFeed(),
+        decisions=DecisionStore(tmp_path / "decisions.json"),
+        strategy=strategy,
+    )
+
+    drifted = horizon.sweep_staleness(now=now)
+
+    assert drifted == ["g1"]
+    aged = strategy.get("g1")
+    assert aged.health == "drifting"
+    assert aged.done is False  # re-opened for re-verification
+    assert aged.score == 0.45  # 0.30 + 0.15 stale_bump
+    assert intake.priorities["task_1"] == "medium"  # 0.45 crosses the low->medium threshold
+    assert strategy.get("g2").health == "on_track"  # fresh goal untouched

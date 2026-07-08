@@ -13,9 +13,10 @@ Each step is a small, independently-testable engine; the facade composes them an
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 
 from horizon.errors import HorizonError, UnknownDecision
-from horizon.feedback._health import HealthPolicy
+from horizon.feedback._health import HealthPolicy, staleness_health
 from horizon.feedback._listener import Observer, OutcomeListener
 from horizon.intake._prioritiser import Prioritiser, ScorePolicy
 from horizon.intake._submitter import Submitter
@@ -51,6 +52,7 @@ class Horizon:
         self._decisions = decisions or DecisionStore()
         self._strategy = strategy or StrategyStore()
         self._score_policy = score_policy or ScorePolicy()
+        self._health_policy = health_policy or HealthPolicy()
 
         self._prioritiser = Prioritiser(intake, policy=self._score_policy)
         self._submitter = Submitter(
@@ -74,7 +76,7 @@ class Horizon:
             outcomes=outcomes,
             strategy=self._strategy,
             prioritiser=self._prioritiser,
-            policy=health_policy,
+            policy=self._health_policy,
             observer=outcome_observer,
         )
 
@@ -112,6 +114,28 @@ class Horizon:
         if record is None or record.task_id is None:
             return None
         return self._prioritiser.apply(record.task_id, record.score)
+
+    def sweep_staleness(self, *, now: datetime | None = None) -> list[str]:
+        """Decay trust in goals verified long ago: drift stale ``on_track`` goals + resurface them.
+
+        The drift clock made real — a goal whose last landed verdict has aged past the policy's
+        ``stale_after_s`` is re-opened (``done=False``), marked ``drifting``, nudged up by ``stale_bump``
+        so it resurfaces for re-verification, and re-prioritised. Returns the goal ids that drifted.
+        Call it on a schedule (a cron/tick); horizon never runs its own loop.
+        """
+        drifted: list[str] = []
+        for record in self._strategy.all():
+            new_health = staleness_health(record, policy=self._health_policy, now=now)
+            if new_health == record.health:
+                continue
+            record.health = new_health
+            record.done = False
+            record.score = round(min(1.0, record.score + self._health_policy.stale_bump), 4)
+            self._strategy.put(record)
+            if record.task_id is not None:
+                self._prioritiser.apply(record.task_id, record.score)
+            drifted.append(record.goal_id)
+        return drifted
 
     # -- back-pressure (reads / subscription) ---------------------------------
 

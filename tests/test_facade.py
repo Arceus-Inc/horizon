@@ -99,6 +99,7 @@ def test_passing_outcome_marks_goal_done_in_state(tmp_path):
     feed.emit(OutcomeEvent(kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=True))
 
     assert horizon.state()[0].goals[0].status == "done"
+    assert horizon.listener_stats() == {"handled": 1, "dropped": 0, "deferred": 0}
 
 
 def test_decompose_without_reasoner_raises(tmp_path):

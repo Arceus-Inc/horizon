@@ -146,6 +146,14 @@ class Horizon:
     def stop(self) -> None:
         self._listener.stop()
 
+    def listener_stats(self) -> dict[str, int]:
+        """The feedback listener's counters — proof the event wiring is live (handled/dropped/deferred)."""
+        return {
+            "handled": self._listener.handled,
+            "dropped": self._listener.dropped,
+            "deferred": self._listener.deferred,
+        }
+
     def goal_view(self, goal_id: str) -> Goal | None:
         """Assemble the rich :class:`Goal` — chorus's skeleton merged with horizon's strategy record."""
         node = self._goals.get(goal_id)

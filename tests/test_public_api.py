@@ -72,6 +72,7 @@ def test_horizon_facade_exposes_the_loop_methods():
         "submit_decision",
         "reprioritise",
         "sweep_staleness",
+        "listener_stats",
         "start",
         "stop",
         "goal_view",

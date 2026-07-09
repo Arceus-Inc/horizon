@@ -40,7 +40,7 @@ from horizon.intake import ScorePolicy, fingerprint
 from horizon.model import Decision
 
 _EMPLOYEE = "vera"
-_N_EXECUTE = 3  # how many top goals to run through REAL beats
+_N_EXECUTE: int | None = None  # how many top goals to run through REAL beats; None = all of them
 _TERMINAL = (TaskStatus.DONE, TaskStatus.CANCELLED, TaskStatus.BLOCKED, TaskStatus.REJECTED)
 _MAX_TICKS = 240
 
@@ -356,7 +356,7 @@ async def run() -> dict[str, Any]:
     print(f"  -> {len(goals)} goals ({call['input_tokens']} in / {call['output_tokens']} out tokens)")
 
     ordered = sorted(goals, key=lambda g: g.score, reverse=True)
-    to_execute = ordered[:_N_EXECUTE]
+    to_execute = ordered if _N_EXECUTE is None else ordered[:_N_EXECUTE]
 
     horizon.start()
 

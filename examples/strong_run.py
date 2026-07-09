@@ -20,6 +20,7 @@ import os
 import shutil
 import sqlite3
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -166,6 +167,68 @@ def _landed(ledger: SqliteLedger, task_id: str) -> list[dict[str, Any]]:
         for artifact in ledger.artifacts.list_for_task(task_id):
             out.append({"type": artifact.type.value, "ref": artifact.resource_ref})
     return out
+
+
+def _beat_ops(worktree: Path, since_ts: float) -> dict[str, Any]:
+    """Parse the dream sidecar traces from this beat into a per-employee tool + operations log.
+
+    Each beat runs as a dream session that appends events to ``.dream/sidecars/<run>/logs/trace.jsonl``
+    — ``tool.call`` / ``tool.result`` / ``llm.call``. We read the traces written since ``since_ts`` (this
+    beat's window; beats run sequentially so windows never overlap) and aggregate them the way the old
+    chorus reports did: a tool histogram, an error count, LLM token totals, and an ordered op timeline.
+    """
+    tools: dict[str, int] = {}
+    timeline: list[dict[str, Any]] = []
+    tool_calls = tool_errors = llm_calls = 0
+    prompt_tokens = completion_tokens = cache_read_tokens = 0
+    llm_ms = 0.0
+    sidecars = worktree / ".dream" / "sidecars"
+    if not sidecars.is_dir():
+        return {}
+    for trace in sorted(sidecars.glob("*/logs/trace.jsonl")):
+        with contextlib.suppress(OSError):
+            if trace.stat().st_mtime < since_ts - 1.0:
+                continue
+        text = ""
+        with contextlib.suppress(OSError):
+            text = trace.read_text(encoding="utf-8")
+        for line in text.splitlines():
+            try:
+                ev = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            et = ev.get("event_type")
+            attrs = ev.get("attributes") or {}
+            if et == "tool.call":
+                name = str(attrs.get("tool.name", "?"))
+                tools[name] = tools.get(name, 0) + 1
+                tool_calls += 1
+                if len(timeline) < 200:
+                    timeline.append({"name": name, "error": False})
+            elif et == "tool.result":
+                if attrs.get("tool.is_error"):
+                    tool_errors += 1
+                    if timeline:
+                        timeline[-1]["error"] = True
+            elif et == "llm.call":
+                llm_calls += 1
+                prompt_tokens += int(attrs.get("gen_ai.usage.prompt_tokens", 0) or 0)
+                completion_tokens += int(attrs.get("gen_ai.usage.completion_tokens", 0) or 0)
+                cache_read_tokens += int(attrs.get("gen_ai.usage.cache_read_tokens", 0) or 0)
+                llm_ms += float(attrs.get("duration_ms", 0) or 0)
+    if not tool_calls and not llm_calls:
+        return {}
+    return {
+        "tool_calls": tool_calls,
+        "tool_errors": tool_errors,
+        "tools": dict(sorted(tools.items(), key=lambda kv: kv[1], reverse=True)),
+        "llm_calls": llm_calls,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cache_read_tokens": cache_read_tokens,
+        "llm_seconds": round(llm_ms / 1000.0, 1),
+        "timeline": timeline,
+    }
 
 
 def _diagnostic_for(ledger: SqliteLedger, task_id: str) -> str:
@@ -324,6 +387,7 @@ async def run() -> dict[str, Any]:
         )
         print(f"  submitted {goal.title!r} -> {task_id} ({score_policy.priority_for(goal.score)})")
         print("  running real beat...")
+        beat_t0 = time.time()
         before_files = _snapshot(materialized.working_dir)
         trail = await _run_to_terminal(chorus, ledger, task_id)
         after_files = _snapshot(materialized.working_dir)
@@ -342,6 +406,7 @@ async def run() -> dict[str, Any]:
                 "run_outcome": runs[-1].outcome if runs else None,
                 "artifacts": _produced_files(materialized.working_dir, before_files, after_files),
                 "artifacts_landed": _landed(ledger, task_id),
+                "ops": _beat_ops(materialized.working_dir, beat_t0),
                 "folded": len(reporter.transitions) > transitions_before,
             }
         )
@@ -372,6 +437,7 @@ async def run() -> dict[str, Any]:
                 continue
             retry_task = ledger.tasks.get(goal.task_id)
             print(f"  RECOVER {goal.title[:44]!r} -> {goal.task_id}; running recovery beat...")
+            beat_t0 = time.time()
             before_files = _snapshot(materialized.working_dir)
             trail = await _run_to_terminal(chorus, ledger, goal.task_id)
             after_files = _snapshot(materialized.working_dir)
@@ -389,6 +455,7 @@ async def run() -> dict[str, Any]:
                     "artifacts": _produced_files(
                         materialized.working_dir, before_files, after_files
                     ),
+                    "ops": _beat_ops(materialized.working_dir, beat_t0),
                 }
             )
             print(f"    -> {trail[-1] if trail else '?'}  dod={dod.status.value if dod else '?'}")
@@ -529,6 +596,13 @@ td.num{font:12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-sp
 details.art{background:#fbfcfe;border:1px solid var(--line);border-radius:12px;margin:10px 0;}
 details.art>summary{cursor:pointer;padding:12px 16px;font-weight:650;font-size:13.5px;}
 details.art pre{margin:0;padding:0 16px 16px;white-space:pre-wrap;word-wrap:break-word;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#24292f;}
+details.ops{background:#f6f8ff;border-color:#c7d2fe;}
+.opgrid{display:flex;flex-wrap:wrap;gap:6px 8px;padding:4px 16px 10px;}
+.opbar{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #c7d2fe;border-radius:999px;padding:3px 10px;font-size:12px;color:#3730a3;}
+.opbar .opcount{background:#4f46e5;color:#fff;border-radius:999px;padding:0 7px;font-weight:700;font-size:11px;}
+.opseq{display:flex;flex-wrap:wrap;gap:4px;padding:0 16px 14px;}
+.opstep{font:11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#eef2ff;color:#4338ca;border-radius:5px;padding:2px 6px;}
+.opstep.err{background:#fee2e2;color:#b91c1c;}
 .transition{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:6px;font-size:13px;}
 .transition .kv{color:var(--muted);}
 .transition .kv b{color:var(--ink);}
@@ -538,6 +612,37 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px;}
 
 def _esc(value: object) -> str:
     return html.escape("" if value is None else str(value))
+
+
+def _ops_html(ops: dict[str, Any] | None, who: str) -> str:
+    """Render the per-employee tool-usage + operations log for one beat (the old-chorus-style panel)."""
+    if not ops:
+        return ""
+    tools = ops.get("tools", {})
+    bars = "".join(
+        f'<div class="opbar"><span class="opname">{_esc(name)}</span>'
+        f'<span class="opcount">{count}</span></div>'
+        for name, count in tools.items()
+    )
+    timeline = ops.get("timeline", [])
+    seq = "".join(
+        f'<span class="opstep{" err" if step.get("error") else ""}">{_esc(step["name"])}</span>'
+        for step in timeline
+    )
+    errors = ops.get("tool_errors", 0)
+    err_txt = f", {errors} errors" if errors else ""
+    summary = (
+        f"{ops.get('tool_calls', 0)} tool calls{err_txt}, "
+        f"{ops.get('llm_calls', 0)} LLM calls · "
+        f"{ops.get('prompt_tokens', 0)}&#8202;/&#8202;{ops.get('completion_tokens', 0)} tok in/out · "
+        f"{ops.get('llm_seconds', 0)}s"
+    )
+    return (
+        f'<details class="art ops" open><summary><b>{_esc(who)}</b> — tools &amp; operations '
+        f"({summary})</summary>"
+        f'<div class="opgrid">{bars}</div>'
+        f'<div class="opseq">{seq}</div></details>'
+    )
 
 
 def render_html(data: dict[str, Any]) -> str:
@@ -624,6 +729,7 @@ horizon folded {passes + fails} real DoD verdict(s) ({passes} pass / {fails} fai
             f'<div class="transition"><span class="kv">status trail: <span class="mono">{_esc(" → ".join(e["status_trail"]))}</span></span></div>'
             f'<details class="art"><summary>Raw DoD verdict</summary><pre>{_esc(json.dumps(e["dod_verdict"], indent=2))}</pre></details>'
         )
+        parts.append(_ops_html(e.get("ops"), meta["employee"]))
         landed = e.get("artifacts_landed", [])
         if landed:
             refs = ", ".join(_esc(a["type"]) for a in landed)
@@ -668,6 +774,7 @@ horizon folded {passes + fails} real DoD verdict(s) ({passes} pass / {fails} fai
                 f'<span class="badge {"ok" if r["dod_status"]=="passed" else "warn"}">DoD {_esc(r["dod_status"])}</span></div>'
                 f'<details class="art" open><summary>The re-submitted intent (the diagnostic threaded in)</summary><pre>{_esc(r["intent"])}</pre></details>'
             )
+            parts.append(_ops_html(r.get("ops"), meta["employee"]))
             r_arts = r.get("artifacts", [])
             if r_arts:
                 parts.append(

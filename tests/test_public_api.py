@@ -79,5 +79,10 @@ def test_horizon_facade_exposes_the_loop_methods():
         "stop",
         "goal_view",
         "state",
+        "reconcile",
+        "list_proposals",
+        "explain_proposal",
+        "approve_proposal",
+        "reject_proposal",
     ):
         assert callable(getattr(horizon.Horizon, method))

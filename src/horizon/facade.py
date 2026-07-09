@@ -15,14 +15,23 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
+from horizon._ids import mint_id
 from horizon.errors import HorizonError, UnknownDecision
 from horizon.feedback._health import HealthPolicy, staleness_health
 from horizon.feedback._listener import Observer, OutcomeListener
+from horizon.generation import (
+    Approvals,
+    DirectionBrief,
+    Proposal,
+    ProposalStore,
+    Reconciler,
+)
 from horizon.intake._fingerprint import fingerprint
 from horizon.intake._prioritiser import Prioritiser, ScorePolicy
 from horizon.intake._submitter import Submitter
 from horizon.model import Decision, Goal
 from horizon.model._state import DecisionState
+from horizon.planning._authoring import author_goals
 from horizon.planning._decomposer import Decomposer
 from horizon.planning._reasoner import Reasoner
 from horizon.ports import GoalStore, IntakePort, OutcomeEvent, OutcomeFeed
@@ -47,12 +56,14 @@ class Horizon:
         outcome_observer: Observer | None = None,
         model: str | None = None,
         decompose_context: str | None = None,
+        proposals: ProposalStore | None = None,
     ) -> None:
         self._goals = goals
         self._intake = intake
         self._outcomes = outcomes
         self._decisions = decisions or DecisionStore()
         self._strategy = strategy or StrategyStore()
+        self._proposals = proposals or ProposalStore()
         self._score_policy = score_policy or ScorePolicy()
         self._health_policy = health_policy or HealthPolicy()
         self._default_assignee = default_assignee
@@ -83,6 +94,8 @@ class Horizon:
             policy=self._health_policy,
             observer=outcome_observer,
         )
+        self._reconciler = Reconciler(proposals=self._proposals, decisions=self._decisions)
+        self._approvals = Approvals(proposals=self._proposals, promote=self._promote_proposal)
 
     # -- direction (writes) ---------------------------------------------------
 
@@ -111,6 +124,63 @@ class Horizon:
             if goal is not None:
                 task_ids.append(self._submitter.submit(goal))
         return task_ids
+
+    # -- generation funnel (Theme C — evidence -> proposed decisions, human-gated) ------------
+
+    def reconcile(self, briefs: list[DirectionBrief]) -> list[Proposal]:
+        """Fold analyst briefs into deduped, proposal-only records; returns the newly created ones."""
+        return self._reconciler.reconcile(briefs)
+
+    def list_proposals(self, *, status: str | None = "proposed") -> list[Proposal]:
+        """List proposals awaiting (or past) a human decision — default: the open ones."""
+        return self._approvals.list_proposals(status=status)
+
+    def explain_proposal(self, proposal_id: str) -> str:
+        """An auditable preview of what approving a proposal would create — no writes."""
+        return self._approvals.explain(proposal_id)
+
+    def approve_proposal(self, proposal_id: str, *, by: str) -> str:
+        """Approve a proposal: seed a live decision from its brief, author its goals, submit them.
+
+        The only path from a proposal to the live tree. Returns the new (live) decision id.
+        """
+        return self._approvals.approve(proposal_id, by=by)
+
+    def reject_proposal(self, proposal_id: str, *, by: str, reason: str = "") -> None:
+        """Close a proposal without promoting it — records who / when / why."""
+        self._approvals.reject(proposal_id, by=by, reason=reason)
+
+    def _promote_proposal(self, proposal: Proposal) -> str:
+        """Turn an approved proposal into a real live decision + goals + submitted tasks."""
+        if proposal.brief is None:
+            raise HorizonError(f"proposal {proposal.id} has no brief to promote")
+        decision = Decision(
+            id=mint_id("dec"),
+            statement=proposal.decision_statement,
+            status="active",
+            owner=self._default_assignee,
+            rationale=proposal.decision_rationale,
+        )
+        specs = [
+            {
+                "title": cg.title,
+                "metric": cg.metric or None,
+                "target": cg.target or None,
+                "rationale": cg.rationale,
+                # the analyst's per-goal score when present, else the brief-level confidence
+                "score": cg.score if cg.score > 0 else proposal.brief.confidence,
+            }
+            for cg in proposal.brief.candidate_goals
+        ]
+        author_goals(
+            decision,
+            specs,
+            goals=self._goals,
+            strategy=self._strategy,
+            decisions=self._decisions,
+        )
+        self.submit_decision(decision.id)
+        return decision.id
 
     def reprioritise(self, goal_id: str) -> str | None:
         """Re-apply a goal's current score to its task priority; returns the priority, or None."""

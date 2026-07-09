@@ -14,12 +14,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from horizon._ids import mint_id
 from horizon.errors import DecompositionError, UnknownDecision
 from horizon.model import Decision, Goal
-from horizon.model._strategy import StrategyRecord
+from horizon.planning._authoring import author_goals
 from horizon.planning._reasoner import Reasoner
-from horizon.ports import GoalNode, GoalStore
+from horizon.ports import GoalStore
 from horizon.store import DecisionStore, StrategyStore
 
 _PROMPT = """You are the strategy decomposer for an autonomous software company.
@@ -216,45 +215,10 @@ class Decomposer:
             retry = self._reasoner.complete(prompt + _RETRY_SUFFIX, fallback)
             specs = _parse_goals(retry.text)
 
-        goals: list[Goal] = []
-        new_ids: list[str] = []
-        for spec in specs:
-            goal_id = mint_id("goal")
-            self._goals.upsert(
-                GoalNode(
-                    id=goal_id,
-                    title=spec["title"],
-                    level="goal",
-                    status="active",
-                    owner=decision.owner,
-                )
-            )
-            rationale = spec["rationale"]
-            record = StrategyRecord(
-                goal_id=goal_id,
-                title=spec["title"],
-                score=spec["score"],
-                metric=spec["metric"],
-                target=spec["target"],
-                evidence=[rationale] if rationale else [],
-                decision_id=decision.id,
-            )
-            self._strategy.put(record)
-            goals.append(
-                Goal(
-                    id=goal_id,
-                    title=spec["title"],
-                    decision_id=decision.id,
-                    status="active",
-                    owner=decision.owner,
-                    score=record.score,
-                    metric=record.metric,
-                    target=record.target,
-                    evidence=list(record.evidence),
-                )
-            )
-            new_ids.append(goal_id)
-
-        decision.goal_ids = list(dict.fromkeys([*decision.goal_ids, *new_ids]))
-        self._decisions.put(decision)
-        return goals
+        return author_goals(
+            decision,
+            specs,
+            goals=self._goals,
+            strategy=self._strategy,
+            decisions=self._decisions,
+        )

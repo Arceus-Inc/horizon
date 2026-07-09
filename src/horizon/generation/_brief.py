@@ -21,6 +21,7 @@ class CandidateGoal:
     metric: str = ""
     target: str = ""
     rationale: str = ""
+    score: float = 0.0  # 0..1 relative priority (mirrors the decomposer's per-goal score)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> CandidateGoal:
@@ -29,6 +30,7 @@ class CandidateGoal:
             metric=str(raw.get("metric", "")),
             target=str(raw.get("target", "")),
             rationale=str(raw.get("rationale", "")),
+            score=float(raw.get("score", 0.0) or 0.0),
         )
 
 

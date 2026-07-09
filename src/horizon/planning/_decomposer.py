@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from horizon._jsonio import extract_json
 from horizon.errors import DecompositionError, UnknownDecision
 from horizon.model import Decision, Goal
 from horizon.planning._authoring import author_goals
@@ -91,26 +92,6 @@ def _build_prompt(decision: Decision, context: str | None = None) -> str:
     return prompt
 
 
-def _extract_json(text: str) -> str:
-    """Pull the JSON object out of a model reply that may be fenced or wrapped in prose."""
-    stripped = text.strip()
-    if "```" in stripped:
-        for chunk in stripped.split("```"):
-            candidate = chunk[4:].strip() if chunk.startswith("json") else chunk.strip()
-            if candidate.startswith("{"):
-                stripped = candidate
-                break
-    start, end = stripped.find("{"), stripped.rfind("}")
-    # take the outermost JSON value — an object {...} or a bare array [...]
-    starts = [i for i in (start, stripped.find("[")) if i != -1]
-    ends = [i for i in (end, stripped.rfind("]")) if i != -1]
-    if starts and ends:
-        start, end = min(starts), max(ends)
-        if end > start:
-            return stripped[start : end + 1]
-    return stripped
-
-
 def _opt_str(value: object) -> str | None:
     if value is None:
         return None
@@ -133,7 +114,7 @@ def _clamp_score(value: object) -> float:
 
 def _parse_goals(text: str) -> list[dict[str, Any]]:
     try:
-        data = json.loads(_extract_json(text))
+        data = json.loads(extract_json(text))
     except json.JSONDecodeError as exc:
         raise DecompositionError(f"model output was not valid JSON: {exc}") from exc
     if isinstance(data, list):

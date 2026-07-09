@@ -171,9 +171,11 @@ class Horizon:
                 continue
             intent = (
                 f"{node.title}\n\n"
-                f"The previous attempt (#{record.attempts}) did not pass. Reason:\n"
+                f"This is retry #{record.attempts + 1}. The previous attempt did not pass. Reason:\n"
                 f"{record.last_diagnostic}\n\n"
-                "Address this specifically and complete the goal."
+                "Your earlier work is still in your workspace — the files, scripts, data, and outputs you "
+                "already produced. Review them first, keep what is correct, and build on them; do not start "
+                "from scratch. Fix the specific issue above and complete the goal."
             )
             task_id = self._intake.submit(
                 intent,

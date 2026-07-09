@@ -94,8 +94,34 @@ def _seed_warehouse(path: Path) -> None:
 
 
 _SEEDED = {"warehouse.db", "BRIEF.md"}
-_SKIP_DIRS = {"node_modules", ".git", ".venv", "__pycache__", ".pytest_cache", ".chorus", ".dream"}
+# Skip both engine noise (.dream/.chorus) AND the harness scaffolding the factory materializes
+# into every worktree (.harness roles/skills/cron, docs/evals, docs/exec-plans) — none of that is
+# the employee's OWN deliverable. What's left is what the analyst actually wrote (findings.md,
+# scripts, data files) at the worktree root plus its .analysis notebook.
+_SKIP_DIRS = {
+    "node_modules",
+    ".git",
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".chorus",
+    ".dream",
+    ".harness",
+    "docs",
+}
 _MAX_ARTIFACT_BYTES = 8000
+
+
+def _deliverable_rank(rel: str) -> tuple[int, str]:
+    """Sort key that floats the human-readable deliverable to the top, then scripts, then data."""
+    name = rel.rsplit("/", 1)[-1].lower()
+    if name in {"findings.md", "summary.md", "report.md", "readme.md"}:
+        return (0, rel)
+    if name.endswith((".md", ".txt")):
+        return (1, rel)
+    if name.endswith((".py", ".sql", ".ipynb")):
+        return (2, rel)
+    return (3, rel)
 
 
 def _snapshot(root: Path) -> dict[str, float]:
@@ -117,10 +143,11 @@ def _produced_files(
 ) -> list[dict[str, Any]]:
     """The files the beat created or changed (the employee's OWN artifacts), with bounded content."""
     changed = sorted(
-        rel for rel, mtime in after.items() if before.get(rel) != mtime and rel not in _SEEDED
+        (rel for rel, mtime in after.items() if before.get(rel) != mtime and rel not in _SEEDED),
+        key=_deliverable_rank,
     )
     files: list[dict[str, Any]] = []
-    for rel in changed[:16]:
+    for rel in changed[:24]:
         raw = b""
         with contextlib.suppress(OSError):
             raw = (root / rel).read_bytes()
@@ -320,7 +347,11 @@ async def run() -> dict[str, Any]:
         )
         print(f"    -> {trail[-1] if trail else '?'}  dod={dod.status.value if dod else '?'}")
 
-    # ---- Recovery pass: re-attempt failed goals with the diagnostic threaded into the next beat ----
+    # ---- Recovery: re-attempt failed goals until done or attempts exhausted (end-to-end) ----
+    # horizon threads the diagnostic into the next beat AND (via the enhanced recover intent) tells the
+    # employee its prior work is still in the shared worktree — so each retry builds on the last instead
+    # of starting blind. We loop: run the recovered beat, note its fresh verdict, and if it still failed
+    # horizon re-opens it again — until every goal is done or attempts run out.
     recoveries: list[dict[str, Any]] = []
     for e in executions:
         if e["dod_status"] == "passed" or e["folded"]:
@@ -328,28 +359,45 @@ async def run() -> dict[str, Any]:
         diagnostic = _diagnostic_for(ledger, e["task_id"])
         horizon.note_outcome(e["goal_id"], passed=False, diagnostic=diagnostic)
         print(f"  noted failure on {e['title'][:44]!r}")
-    for goal_id in horizon.recover(max_attempts=2):
-        goal = horizon.goal_view(goal_id)
-        if goal is None or goal.task_id is None:
-            continue
-        retry_task = ledger.tasks.get(goal.task_id)
-        print(f"  RECOVER {goal.title[:44]!r} -> {goal.task_id}; running recovery beat...")
-        before_files = _snapshot(materialized.working_dir)
-        trail = await _run_to_terminal(chorus, ledger, goal.task_id)
-        after_files = _snapshot(materialized.working_dir)
-        dod = ledger.dod.get_for_task(goal.task_id)
-        recoveries.append(
-            {
-                "goal_id": goal_id,
-                "title": goal.title,
-                "task_id": goal.task_id,
-                "intent": retry_task.intent if retry_task is not None else "",
-                "final_status": trail[-1] if trail else "unknown",
-                "dod_status": dod.status.value if dod is not None else None,
-                "artifacts": _produced_files(materialized.working_dir, before_files, after_files),
-            }
-        )
-        print(f"    -> {trail[-1] if trail else '?'}  dod={dod.status.value if dod else '?'}")
+
+    _MAX_RECOVERY_ROUNDS = 3
+    for _round in range(_MAX_RECOVERY_ROUNDS):
+        recovered_ids = horizon.recover(max_attempts=_MAX_RECOVERY_ROUNDS + 1)
+        if not recovered_ids:
+            break
+        print(f"  -- recovery round {_round + 1}: {len(recovered_ids)} goal(s) re-opened --")
+        for goal_id in recovered_ids:
+            goal = horizon.goal_view(goal_id)
+            if goal is None or goal.task_id is None:
+                continue
+            retry_task = ledger.tasks.get(goal.task_id)
+            print(f"  RECOVER {goal.title[:44]!r} -> {goal.task_id}; running recovery beat...")
+            before_files = _snapshot(materialized.working_dir)
+            trail = await _run_to_terminal(chorus, ledger, goal.task_id)
+            after_files = _snapshot(materialized.working_dir)
+            dod = ledger.dod.get_for_task(goal.task_id)
+            dod_passed = dod is not None and dod.status.value == "passed"
+            recoveries.append(
+                {
+                    "goal_id": goal_id,
+                    "round": _round + 1,
+                    "title": goal.title,
+                    "task_id": goal.task_id,
+                    "intent": retry_task.intent if retry_task is not None else "",
+                    "final_status": trail[-1] if trail else "unknown",
+                    "dod_status": dod.status.value if dod is not None else None,
+                    "artifacts": _produced_files(
+                        materialized.working_dir, before_files, after_files
+                    ),
+                }
+            )
+            print(f"    -> {trail[-1] if trail else '?'}  dod={dod.status.value if dod else '?'}")
+            # feed the fresh verdict back so a still-failing goal earns another informed retry
+            horizon.note_outcome(
+                goal_id,
+                passed=dod_passed,
+                diagnostic="" if dod_passed else _diagnostic_for(ledger, goal.task_id),
+            )
 
     # ---- capture feedback transitions + final direction ----
     feedback: list[dict[str, Any]] = []
@@ -586,13 +634,17 @@ horizon folded {passes + fails} real DoD verdict(s) ({passes} pass / {fails} fai
                 f'<div class="why">Artifacts the Analyst chose to produce ({len(artifacts)}) — horizon prescribed none:</div>'
             )
             for a in artifacts:
+                name = a["path"].rsplit("/", 1)[-1].lower()
+                is_primary = name in {"findings.md", "summary.md", "report.md", "readme.md"}
+                openattr = " open" if is_primary else ""
+                star = " ★ deliverable" if is_primary else ""
                 if a["binary"]:
                     parts.append(
                         f'<details class="art"><summary>{_esc(a["path"])} — binary, {a["bytes"]} bytes</summary></details>'
                     )
                 else:
                     parts.append(
-                        f'<details class="art"><summary>{_esc(a["path"])} — {a["bytes"]} bytes</summary><pre>{_esc(a["content"])}</pre></details>'
+                        f'<details class="art"{openattr}><summary>{_esc(a["path"])}{star} — {a["bytes"]} bytes</summary><pre>{_esc(a["content"])}</pre></details>'
                     )
         else:
             parts.append('<div class="why">(no new artifacts detected in the worktree)</div>')
@@ -608,12 +660,33 @@ horizon folded {passes + fails} real DoD verdict(s) ({passes} pass / {fails} fai
         )
         for r in data["recoveries"]:
             ok = r["final_status"] == "done"
+            rnd = r.get("round")
+            round_badge = f'<span class="badge">round {rnd}</span>' if rnd else ""
             parts.append(
-                f'<div class="decision-row"><div class="head"><b>{_esc(r["title"])}</b>'
+                f'<div class="decision-row"><div class="head"><b>{_esc(r["title"])}</b>{round_badge}'
                 f'<span class="badge {"ok" if ok else "fail"}">retry: {_esc(r["final_status"])}</span>'
                 f'<span class="badge {"ok" if r["dod_status"]=="passed" else "warn"}">DoD {_esc(r["dod_status"])}</span></div>'
-                f'<details class="art" open><summary>The re-submitted intent (the diagnostic threaded in)</summary><pre>{_esc(r["intent"])}</pre></details></div>'
+                f'<details class="art" open><summary>The re-submitted intent (the diagnostic threaded in)</summary><pre>{_esc(r["intent"])}</pre></details>'
             )
+            r_arts = r.get("artifacts", [])
+            if r_arts:
+                parts.append(
+                    f'<div class="why">Artifacts after the retry ({len(r_arts)}):</div>'
+                )
+                for a in r_arts:
+                    name = a["path"].rsplit("/", 1)[-1].lower()
+                    is_primary = name in {"findings.md", "summary.md", "report.md", "readme.md"}
+                    openattr = " open" if is_primary else ""
+                    star = " ★ deliverable" if is_primary else ""
+                    if a["binary"]:
+                        parts.append(
+                            f'<details class="art"><summary>{_esc(a["path"])} — binary, {a["bytes"]} bytes</summary></details>'
+                        )
+                    else:
+                        parts.append(
+                            f'<details class="art"{openattr}><summary>{_esc(a["path"])}{star} — {a["bytes"]} bytes</summary><pre>{_esc(a["content"])}</pre></details>'
+                        )
+            parts.append("</div>")
         parts.append("</div></section>")
 
     # Phase 4 — feedback

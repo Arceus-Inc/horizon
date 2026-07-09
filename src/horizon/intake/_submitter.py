@@ -55,5 +55,6 @@ class Submitter:
             origin_fingerprint=fingerprint(goal.id, goal.title),
         )
         record.task_id = task_id
+        record.attempts += 1
         self._strategy.put(record)
         return task_id

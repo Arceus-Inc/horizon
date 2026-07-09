@@ -82,6 +82,12 @@ class OutcomeListener:
         apply_outcome(record, passed=event.passed, policy=self._policy)
         if event.passed:
             record.done = True  # the DoD landed — in v1 (one task per goal) the goal's work is done
+            record.needs_recovery = False
+            record.last_diagnostic = ""
+        else:
+            # a terminal failure — flag it for a diagnostic-carrying retry and store WHY on the node
+            record.needs_recovery = True
+            record.last_diagnostic = event.detail or record.last_diagnostic
         self._strategy.put(record)
         self.handled += 1
         if record.task_id is not None:

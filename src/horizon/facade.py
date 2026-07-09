@@ -18,13 +18,14 @@ from datetime import datetime
 from horizon.errors import HorizonError, UnknownDecision
 from horizon.feedback._health import HealthPolicy, staleness_health
 from horizon.feedback._listener import Observer, OutcomeListener
+from horizon.intake._fingerprint import fingerprint
 from horizon.intake._prioritiser import Prioritiser, ScorePolicy
 from horizon.intake._submitter import Submitter
 from horizon.model import Decision, Goal
 from horizon.model._state import DecisionState
 from horizon.planning._decomposer import Decomposer
 from horizon.planning._reasoner import Reasoner
-from horizon.ports import GoalStore, IntakePort, OutcomeFeed
+from horizon.ports import GoalStore, IntakePort, OutcomeEvent, OutcomeFeed
 from horizon.store import DecisionStore, StrategyStore
 
 
@@ -54,6 +55,7 @@ class Horizon:
         self._strategy = strategy or StrategyStore()
         self._score_policy = score_policy or ScorePolicy()
         self._health_policy = health_policy or HealthPolicy()
+        self._default_assignee = default_assignee
 
         self._prioritiser = Prioritiser(intake, policy=self._score_policy)
         self._submitter = Submitter(
@@ -138,6 +140,58 @@ class Horizon:
                 self._prioritiser.apply(record.task_id, record.score)
             drifted.append(record.goal_id)
         return drifted
+
+    def note_outcome(self, goal_id: str, *, passed: bool, diagnostic: str = "") -> None:
+        """Record a terminal outcome that did NOT arrive as a bus verdict (e.g. a beat that errored).
+
+        chorus only publishes a verdict on ``run.evaluated``; a beat that errors in the evaluate phase
+        (a missing-verdict blip) leaves the task blocked with no bus signal. The composition root, which
+        can read the ledger, calls this with the diagnostic it found so the failure still flows through
+        the same fold — health/score/priority + the stored ``last_diagnostic`` all update uniformly.
+        """
+        self._listener.on_event(
+            OutcomeEvent(kind="run.evaluated", goal_id=goal_id, passed=passed, detail=diagnostic)
+        )
+
+    def recover(self, *, max_attempts: int = 3) -> list[str]:
+        """Re-submit failed goals, carrying the stored diagnostic into the next beat (the recovery loop).
+
+        A goal flagged ``needs_recovery`` (a landed failure) with attempts remaining is re-opened as a
+        NEW task whose intent includes *why the last attempt failed* — the diagnostic stored on the OKR
+        node — so the employee sees it and the next beat is informed, not blind. Bounded by
+        ``max_attempts``. Returns the re-submitted goal ids. Horizon runs no loop of its own; a consumer
+        calls this each round (like ``sweep_staleness``).
+        """
+        recovered: list[str] = []
+        for record in self._strategy.all():
+            if not record.needs_recovery or record.attempts >= max_attempts:
+                continue
+            node = self._goals.get(record.goal_id)
+            if node is None:
+                continue
+            intent = (
+                f"{node.title}\n\n"
+                f"The previous attempt (#{record.attempts}) did not pass. Reason:\n"
+                f"{record.last_diagnostic}\n\n"
+                "Address this specifically and complete the goal."
+            )
+            task_id = self._intake.submit(
+                intent,
+                assignee=node.owner or self._default_assignee,
+                priority=self._score_policy.priority_for(record.score),
+                goal_id=record.goal_id,
+                origin_fingerprint=fingerprint(
+                    record.goal_id, f"{node.title}::attempt{record.attempts + 1}"
+                ),
+            )
+            record.task_id = task_id
+            record.attempts += 1
+            record.needs_recovery = False
+            record.done = False
+            record.health = "unknown"  # re-attempting — awaiting a fresh verdict
+            self._strategy.put(record)
+            recovered.append(record.goal_id)
+        return recovered
 
     # -- back-pressure (reads / subscription) ---------------------------------
 

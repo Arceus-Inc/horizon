@@ -122,6 +122,37 @@ def test_fail_does_not_mark_done(tmp_path):
     assert strategy.get("g1").done is False
 
 
+def test_fail_flags_recovery_and_stores_diagnostic(tmp_path):
+    listener, feed, strategy, _ = _wire(
+        tmp_path, StrategyRecord(goal_id="g1", score=0.6, task_id="task_1")
+    )
+    listener.start()
+    feed.emit(
+        OutcomeEvent(
+            kind="run.evaluated", task_id="task_1", goal_id="g1", passed=False,
+            detail="evaluator reply missing <verdict> section",
+        )
+    )
+    record = strategy.get("g1")
+    assert record.needs_recovery is True
+    assert "missing <verdict>" in record.last_diagnostic
+
+
+def test_pass_clears_recovery_flag_and_diagnostic(tmp_path):
+    listener, feed, strategy, _ = _wire(
+        tmp_path,
+        StrategyRecord(
+            goal_id="g1", score=0.6, task_id="task_1", needs_recovery=True, last_diagnostic="old"
+        ),
+    )
+    listener.start()
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=True))
+    record = strategy.get("g1")
+    assert record.needs_recovery is False
+    assert record.last_diagnostic == ""
+    assert record.done is True
+
+
 def test_listener_survives_a_realistic_noisy_stream(tmp_path):
     # A whole beat's event stream: telemetry noise + a needs-changes sprint + a fail + a final pass.
     listener, feed, strategy, _ = _wire(

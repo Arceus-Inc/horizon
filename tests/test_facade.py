@@ -115,6 +115,69 @@ def test_decompose_without_reasoner_raises(tmp_path):
         horizon.decompose("dec_1")
 
 
+def _decomposed_horizon(tmp_path):
+    text = json.dumps({"goals": [{"title": "Build API", "score": 0.9}]})
+    horizon, _, intake, feed = _horizon(tmp_path, text)
+    horizon.seed_decision(Decision(id="dec_1", statement="x", owner="moe"))
+    horizon.decompose("dec_1")
+    horizon.submit_decision("dec_1")
+    horizon.start()
+    return horizon, intake, feed
+
+
+def test_recover_resubmits_failed_goal_with_diagnostic(tmp_path):
+    horizon, intake, feed = _decomposed_horizon(tmp_path)
+    goal = horizon.state()[0].goals[0]
+
+    feed.emit(
+        OutcomeEvent(
+            kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=False,
+            detail="evaluator reply missing <verdict> section",
+        )
+    )
+
+    recovered = horizon.recover(max_attempts=3)
+    assert recovered == [goal.id]
+    assert len(intake.submitted) == 2  # original + one recovery
+    retry = intake.submitted[-1]
+    assert "missing <verdict>" in retry["intent"]
+    assert "previous attempt" in retry["intent"].lower()
+    assert retry["fingerprint"] != intake.submitted[0]["fingerprint"]  # a fresh task, not a dedup
+
+    assert horizon.recover() == []  # needs_recovery cleared -> no-op
+
+
+def test_recover_respects_max_attempts(tmp_path):
+    horizon, intake, feed = _decomposed_horizon(tmp_path)
+
+    for _ in range(5):
+        goal = horizon.state()[0].goals[0]
+        feed.emit(
+            OutcomeEvent(
+                kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=False, detail="nope"
+            )
+        )
+        horizon.recover(max_attempts=2)
+
+    # initial submit (attempt 1) + exactly one recovery (attempt 2) — then capped
+    assert len(intake.submitted) == 2
+
+
+def test_note_outcome_funnels_a_consumer_detected_failure(tmp_path):
+    horizon, intake, _ = _decomposed_horizon(tmp_path)
+    goal = horizon.state()[0].goals[0]
+
+    # a beat that errored (no bus verdict) — the composition root reports it
+    horizon.note_outcome(
+        goal.id, passed=False, diagnostic="RunTaskError: evaluator reply missing <verdict>"
+    )
+    assert horizon.listener_stats()["handled"] == 1
+
+    recovered = horizon.recover()
+    assert recovered == [goal.id]
+    assert "evaluator reply missing <verdict>" in intake.submitted[-1]["intent"]
+
+
 def test_sweep_staleness_drifts_and_resurfaces_aged_goals(tmp_path):
     from datetime import UTC, datetime, timedelta
 

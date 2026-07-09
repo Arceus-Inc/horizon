@@ -33,4 +33,7 @@ class StrategyRecord:
     fails: int = 0  # landed DoD fails (drift input)
     last_outcome_at: str | None = None  # ISO ts of the last landed outcome (staleness input)
     done: bool = False  # a passing DoD landed — in v1 (one task per goal) the goal's work is done
+    attempts: int = 0  # how many times this goal has been submitted (initial + recoveries)
+    needs_recovery: bool = False  # a terminal failure landed; awaiting a diagnostic-carrying re-attempt
+    last_diagnostic: str = ""  # why the last attempt failed — stored on the node, read into the next beat
 

@@ -7,16 +7,18 @@ whole tail of the funnel end-to-end over fakes.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from horizon import Horizon
-from horizon.errors import ProposalNotOpen
-from horizon.generation import CandidateGoal, DirectionBrief, ProposalStore
+from horizon.errors import HorizonError, ProposalNotOpen
+from horizon.generation import CandidateGoal, DirectionBrief, ProposalStore, SeedSource
 from horizon.store import DecisionStore, StrategyStore
-from tests.fakes import FakeGoalStore, FakeIntakePort, FakeOutcomeFeed
+from tests.fakes import FakeGoalStore, FakeIntakePort, FakeOutcomeFeed, SequenceSubstrate
 
 
-def _horizon(tmp_path):
+def _horizon(tmp_path, *, reasoner=None):
     goals = FakeGoalStore()
     intake = FakeIntakePort()
     feed = FakeOutcomeFeed()
@@ -24,6 +26,7 @@ def _horizon(tmp_path):
         goals=goals,
         intake=intake,
         outcomes=feed,
+        reasoner=reasoner,
         decisions=DecisionStore(tmp_path / "d.json"),
         strategy=StrategyStore(tmp_path / "s.json"),
         proposals=ProposalStore(tmp_path / "p.json"),
@@ -135,3 +138,58 @@ def test_explain_and_reject_never_promote(tmp_path):
     assert rejected[0].note == "not this sprint"
     assert intake.submitted == []  # never promoted
     assert horizon.state() == []
+
+
+def test_generate_runs_the_whole_funnel_head_to_tail(tmp_path):
+    # scout call returns one candidate; analyst call returns one gate-clearing brief
+    scout_reply = json.dumps(
+        {
+            "candidates": [
+                {
+                    "title": "Concentrate on region A",
+                    "thesis": "A is outperforming",
+                    "evidence_ids": ["__EV__"],
+                    "confidence": 0.85,
+                }
+            ]
+        }
+    )
+    analyst_reply = json.dumps(
+        {
+            "recommendation": "Shift next-quarter investment to region A",
+            "rationale": "A has the best margins",
+            "confidence": 0.8,
+            "risks": ["data may be stale"],
+            "candidate_goals": [
+                {"title": "Quantify A upside", "metric": "profit", "target": "+10%", "rationale": "r", "score": 0.9}
+            ],
+            "evidence_refs": ["__EV__"],
+        }
+    )
+    seed = SeedSource(now=lambda: "2026-07-10T00:00:00+00:00")
+    packet = seed.add("Region A margins are climbing", provenance="cofounder")
+    # pin the scripted evidence ids to the real packet id the seed minted
+    reasoner = SequenceSubstrate(
+        [scout_reply.replace("__EV__", packet.id), analyst_reply.replace("__EV__", packet.id)]
+    )
+    horizon, _, intake = _horizon(tmp_path, reasoner=reasoner)
+
+    proposals = horizon.generate([seed])
+
+    assert len(proposals) == 1
+    assert proposals[0].decision_statement == "Shift next-quarter investment to region A"
+    assert horizon.state() == []  # still proposal-only
+
+    decision_id = horizon.approve_proposal(proposals[0].id, by="ceo")
+    view = horizon.state()[0]
+    assert view.decision.id == decision_id
+    assert {g.title for g in view.goals} == {"Quantify A upside"}
+    assert len(intake.submitted) == 1  # a real task was submitted
+
+
+def test_generate_without_a_reasoner_raises(tmp_path):
+    horizon, _, _ = _horizon(tmp_path)  # no reasoner
+    seed = SeedSource()
+    seed.add("some signal")
+    with pytest.raises(HorizonError):
+        horizon.generate([seed])

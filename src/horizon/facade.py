@@ -20,11 +20,16 @@ from horizon.errors import HorizonError, UnknownDecision
 from horizon.feedback._health import HealthPolicy, staleness_health
 from horizon.feedback._listener import Observer, OutcomeListener
 from horizon.generation import (
+    Analyst,
     Approvals,
     DirectionBrief,
+    EvidenceBus,
     Proposal,
     ProposalStore,
     Reconciler,
+    Scout,
+    SourceAdapter,
+    passes_evidence_gate,
 )
 from horizon.intake._fingerprint import fingerprint
 from horizon.intake._prioritiser import Prioritiser, ScorePolicy
@@ -96,6 +101,9 @@ class Horizon:
         )
         self._reconciler = Reconciler(proposals=self._proposals, decisions=self._decisions)
         self._approvals = Approvals(proposals=self._proposals, promote=self._promote_proposal)
+        self._evidence_bus = EvidenceBus()
+        self._scout: Scout | None = Scout(reasoner=reasoner, model=model) if reasoner else None
+        self._analyst: Analyst | None = Analyst(reasoner=reasoner, model=model) if reasoner else None
 
     # -- direction (writes) ---------------------------------------------------
 
@@ -126,6 +134,33 @@ class Horizon:
         return task_ids
 
     # -- generation funnel (Theme C — evidence -> proposed decisions, human-gated) ------------
+
+    def generate(
+        self,
+        sources: list[SourceAdapter],
+        *,
+        since: str | None = None,
+        min_confidence: float = 0.6,
+    ) -> list[Proposal]:
+        """Run the funnel head->tail: collect evidence -> scout -> analyse -> gate -> reconcile.
+
+        Reads the sources through the evidence bus (deduped), scouts candidate opportunities, has the
+        analyst turn each into a brief, keeps only briefs that clear the evidence gate, and reconciles
+        them into *proposed* decisions. Proposal-only — nothing reaches the live tree without approval.
+        Returns the newly-created proposals. Requires a reasoner.
+        """
+        if self._scout is None or self._analyst is None:
+            raise HorizonError("Horizon was built without a reasoner; cannot generate")
+        fresh = self._evidence_bus.collect(sources, since=since)
+        candidates = self._scout.survey(fresh)
+        by_id = {p.id: p for p in self._evidence_bus.all()}
+        briefs: list[DirectionBrief] = []
+        for candidate in candidates:
+            support = [by_id[i] for i in candidate.evidence_ids if i in by_id]
+            brief = self._analyst.analyze(candidate, support or fresh)
+            if passes_evidence_gate(brief, min_confidence=min_confidence):
+                briefs.append(brief)
+        return self._reconciler.reconcile(briefs)
 
     def reconcile(self, briefs: list[DirectionBrief]) -> list[Proposal]:
         """Fold analyst briefs into deduped, proposal-only records; returns the newly created ones."""

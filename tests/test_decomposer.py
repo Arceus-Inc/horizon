@@ -177,6 +177,41 @@ def test_decompose_retry_then_still_bad_raises(tmp_path):
     assert len(reasoner.calls) == 2
 
 
+def test_decompose_requests_structured_output_by_default(tmp_path):
+    reasoner = FakeSubstrate(json.dumps({"goals": [{"title": "A", "score": 0.9}]}))
+    decisions = DecisionStore(tmp_path / "decisions.json")
+    decomposer = Decomposer(
+        goals=FakeGoalStore(),
+        strategy=StrategyStore(tmp_path / "strategy.json"),
+        decisions=decisions,
+        reasoner=reasoner,
+    )
+    decisions.put(Decision(id="dec_1", statement="grow profit"))
+
+    decomposer.decompose("dec_1")
+
+    response_format = reasoner.params[0]["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True
+    assert "goals" in response_format["json_schema"]["schema"]["properties"]
+
+
+def test_decompose_structured_false_omits_response_format(tmp_path):
+    reasoner = FakeSubstrate(json.dumps({"goals": [{"title": "A", "score": 0.9}]}))
+    decisions = DecisionStore(tmp_path / "decisions.json")
+    decomposer = Decomposer(
+        goals=FakeGoalStore(),
+        strategy=StrategyStore(tmp_path / "strategy.json"),
+        decisions=decisions,
+        reasoner=reasoner,
+        structured=False,
+    )
+    decisions.put(Decision(id="dec_1", statement="grow profit"))
+
+    decomposer.decompose("dec_1")
+    assert "response_format" not in reasoner.params[0]
+
+
 def test_decompose_grounds_the_prompt_in_available_context(tmp_path):
     reasoner = FakeSubstrate(json.dumps({"goals": [{"title": "A", "score": 0.9}]}))
     decisions = DecisionStore(tmp_path / "decisions.json")

@@ -99,16 +99,18 @@ class FakeOutcomeFeed:
 
 
 class FakeSubstrate:
-    """A ``Reasoner`` that returns a canned completion + records the prompts it was asked."""
+    """A ``Reasoner`` that returns a canned completion + records the prompts (and params) it was asked."""
 
     name = "fake"
 
     def __init__(self, text: str) -> None:
         self._text = text
         self.calls: list[str] = []
+        self.params: list[dict[str, Any]] = []
 
     def complete(self, prompt: str, params: dict[str, Any] | None = None) -> CompletionResult:
         self.calls.append(prompt)
+        self.params.append(dict(params or {}))
         return CompletionResult(text=self._text)
 
 
@@ -120,8 +122,10 @@ class SequenceSubstrate:
     def __init__(self, texts: list[str]) -> None:
         self._texts = list(texts)
         self.calls: list[str] = []
+        self.params: list[dict[str, Any]] = []
 
     def complete(self, prompt: str, params: dict[str, Any] | None = None) -> CompletionResult:
         self.calls.append(prompt)
+        self.params.append(dict(params or {}))
         index = min(len(self.calls) - 1, len(self._texts) - 1)
         return CompletionResult(text=self._texts[index])

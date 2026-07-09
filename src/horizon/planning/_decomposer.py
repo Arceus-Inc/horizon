@@ -52,6 +52,38 @@ _RETRY_SUFFIX = (
     "— no prose, no markdown, no code fences."
 )
 
+# The TYPED contract for what the system parses: the model must return schema-valid JSON, enforced at
+# the API boundary (structured outputs) — not coaxed via prose + a regex. strict + closed objects.
+_RESPONSE_FORMAT: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "decomposition",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["goals"],
+            "properties": {
+                "goals": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["title", "metric", "target", "rationale", "score"],
+                        "properties": {
+                            "title": {"type": "string"},
+                            "metric": {"type": "string"},
+                            "target": {"type": "string"},
+                            "rationale": {"type": "string"},
+                            "score": {"type": "number"},
+                        },
+                    },
+                }
+            },
+        },
+    },
+}
+
 
 def _build_prompt(decision: Decision, context: str | None = None) -> str:
     prompt = _PROMPT.replace("__STATEMENT__", decision.statement.strip())
@@ -152,6 +184,7 @@ class Decomposer:
         model: str | None = None,
         max_output_tokens: int = 8000,
         context: str | None = None,
+        structured: bool = True,
     ) -> None:
         self._goals = goals
         self._strategy = strategy
@@ -160,6 +193,7 @@ class Decomposer:
         self._model = model
         self._max_output_tokens = max_output_tokens
         self._context = context
+        self._structured = structured
 
     def decompose(self, decision_id: str) -> list[Goal]:
         """Decompose one decision into goals; idempotent-ish (re-running appends fresh goals)."""
@@ -170,13 +204,16 @@ class Decomposer:
         params: dict[str, Any] = {"max_tokens": self._max_output_tokens}
         if self._model is not None:
             params["model"] = self._model
+        if self._structured:
+            params["response_format"] = _RESPONSE_FORMAT  # typed output, enforced at the API boundary
         prompt = _build_prompt(decision, self._context)
         result = self._reasoner.complete(prompt, params)
         try:
             specs = _parse_goals(result.text)
         except DecompositionError:
-            # one bounded retry with a stricter reminder — LLMs occasionally wrap or truncate JSON
-            retry = self._reasoner.complete(prompt + _RETRY_SUFFIX, params)
+            # structured output makes this near-impossible; fall back to a plain prompt + tolerant parse
+            fallback = {k: v for k, v in params.items() if k != "response_format"}
+            retry = self._reasoner.complete(prompt + _RETRY_SUFFIX, fallback)
             specs = _parse_goals(retry.text)
 
         goals: list[Goal] = []

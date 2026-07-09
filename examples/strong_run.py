@@ -94,7 +94,7 @@ def _seed_warehouse(path: Path) -> None:
 
 
 _SEEDED = {"warehouse.db", "BRIEF.md"}
-_SKIP_DIRS = {"node_modules", ".git", ".venv", "__pycache__", ".pytest_cache", ".chorus"}
+_SKIP_DIRS = {"node_modules", ".git", ".venv", "__pycache__", ".pytest_cache", ".chorus", ".dream"}
 _MAX_ARTIFACT_BYTES = 8000
 
 
@@ -130,6 +130,30 @@ def _produced_files(
             content, binary = "", True
         files.append({"path": rel, "bytes": len(raw), "binary": binary, "content": content})
     return files
+
+
+def _landed(ledger: SqliteLedger, task_id: str) -> list[dict[str, Any]]:
+    """The role artifacts chorus landed for this task (type + resource pointer) — the real deliverable."""
+    out: list[dict[str, Any]] = []
+    with contextlib.suppress(Exception):
+        for artifact in ledger.artifacts.list_for_task(task_id):
+            out.append({"type": artifact.type.value, "ref": artifact.resource_ref})
+    return out
+
+
+def _diagnostic_for(ledger: SqliteLedger, task_id: str) -> str:
+    """A human-readable failure reason from the ledger — the DoD notes, else the run error."""
+    dod = ledger.dod.get_for_task(task_id)
+    if dod is not None and dod.verdict:
+        notes = dod.verdict.get("notes")
+        if notes:
+            return str(notes)
+    runs = ledger.runs.for_task(task_id)
+    if runs and isinstance(runs[-1].outcome, dict):
+        error = runs[-1].outcome.get("error")
+        if error:
+            return str(error)
+    return "the task did not reach a passing verdict"
 
 
 class RecordingReasoner:
@@ -290,7 +314,39 @@ async def run() -> dict[str, Any]:
                 "dod_verdict": dod.verdict if dod is not None else None,
                 "run_outcome": runs[-1].outcome if runs else None,
                 "artifacts": _produced_files(materialized.working_dir, before_files, after_files),
+                "artifacts_landed": _landed(ledger, task_id),
                 "folded": len(reporter.transitions) > transitions_before,
+            }
+        )
+        print(f"    -> {trail[-1] if trail else '?'}  dod={dod.status.value if dod else '?'}")
+
+    # ---- Recovery pass: re-attempt failed goals with the diagnostic threaded into the next beat ----
+    recoveries: list[dict[str, Any]] = []
+    for e in executions:
+        if e["dod_status"] == "passed" or e["folded"]:
+            continue  # passed, or a bus verdict already flagged it for recovery
+        diagnostic = _diagnostic_for(ledger, e["task_id"])
+        horizon.note_outcome(e["goal_id"], passed=False, diagnostic=diagnostic)
+        print(f"  noted failure on {e['title'][:44]!r}")
+    for goal_id in horizon.recover(max_attempts=2):
+        goal = horizon.goal_view(goal_id)
+        if goal is None or goal.task_id is None:
+            continue
+        retry_task = ledger.tasks.get(goal.task_id)
+        print(f"  RECOVER {goal.title[:44]!r} -> {goal.task_id}; running recovery beat...")
+        before_files = _snapshot(materialized.working_dir)
+        trail = await _run_to_terminal(chorus, ledger, goal.task_id)
+        after_files = _snapshot(materialized.working_dir)
+        dod = ledger.dod.get_for_task(goal.task_id)
+        recoveries.append(
+            {
+                "goal_id": goal_id,
+                "title": goal.title,
+                "task_id": goal.task_id,
+                "intent": retry_task.intent if retry_task is not None else "",
+                "final_status": trail[-1] if trail else "unknown",
+                "dod_status": dod.status.value if dod is not None else None,
+                "artifacts": _produced_files(materialized.working_dir, before_files, after_files),
             }
         )
         print(f"    -> {trail[-1] if trail else '?'}  dod={dod.status.value if dod else '?'}")
@@ -373,6 +429,7 @@ async def run() -> dict[str, Any]:
         },
         "submissions": submissions,
         "executions": executions,
+        "recoveries": recoveries,
         "feedback": feedback,
         "direction": direction,
     }
@@ -519,6 +576,10 @@ horizon folded {passes + fails} real DoD verdict(s) ({passes} pass / {fails} fai
             f'<div class="transition"><span class="kv">status trail: <span class="mono">{_esc(" → ".join(e["status_trail"]))}</span></span></div>'
             f'<details class="art"><summary>Raw DoD verdict</summary><pre>{_esc(json.dumps(e["dod_verdict"], indent=2))}</pre></details>'
         )
+        landed = e.get("artifacts_landed", [])
+        if landed:
+            refs = ", ".join(_esc(a["type"]) for a in landed)
+            parts.append(f'<div class="why">Landed in the chorus ledger: <b>{refs}</b></div>')
         artifacts = e.get("artifacts", [])
         if artifacts:
             parts.append(
@@ -537,6 +598,23 @@ horizon folded {passes + fails} real DoD verdict(s) ({passes} pass / {fails} fai
             parts.append('<div class="why">(no new artifacts detected in the worktree)</div>')
         parts.append("</div>")
     parts.append("</div></section>")
+
+    # Phase R — recovery
+    if data.get("recoveries"):
+        parts.append(
+            """<section class="phase"><div class="phase-head"><span class="pnum">R</span><div>
+<h3>Recover — failed goals re-attempted with the diagnostic</h3>
+<p>horizon stores <em>why the last attempt failed</em> on the OKR node and re-opens the goal as a NEW task whose intent carries that diagnostic — so the next beat is informed, not blind. horizon decides this; chorus runs it.</p></div></div><div class="phase-body">"""
+        )
+        for r in data["recoveries"]:
+            ok = r["final_status"] == "done"
+            parts.append(
+                f'<div class="decision-row"><div class="head"><b>{_esc(r["title"])}</b>'
+                f'<span class="badge {"ok" if ok else "fail"}">retry: {_esc(r["final_status"])}</span>'
+                f'<span class="badge {"ok" if r["dod_status"]=="passed" else "warn"}">DoD {_esc(r["dod_status"])}</span></div>'
+                f'<details class="art" open><summary>The re-submitted intent (the diagnostic threaded in)</summary><pre>{_esc(r["intent"])}</pre></details></div>'
+            )
+        parts.append("</div></section>")
 
     # Phase 4 — feedback
     parts.append(

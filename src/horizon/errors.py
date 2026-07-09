@@ -17,3 +17,11 @@ class UnknownGoal(HorizonError):
 
 class DecompositionError(HorizonError):
     """Raised when the LLM decomposition output cannot be parsed into at least one valid goal."""
+
+
+class UnknownProposal(HorizonError):
+    """Raised when a proposal id is not found in the store."""
+
+
+class ProposalNotOpen(HorizonError):
+    """Raised when approving/rejecting a proposal that is no longer 'proposed'."""

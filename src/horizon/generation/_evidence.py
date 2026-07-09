@@ -8,7 +8,16 @@ the shape they emit.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
+
+from horizon.intake._fingerprint import normalize_intent
+
+
+def evidence_id(source: str, body: str) -> str:
+    """A stable, content-scoped id so the same signal from the same source dedups across polls."""
+    digest = hashlib.sha256(f"{source}:{normalize_intent(body)}".encode()).hexdigest()[:12]
+    return f"ev_{digest}"
 
 
 @dataclass(frozen=True)

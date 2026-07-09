@@ -13,20 +13,37 @@ from __future__ import annotations
 
 from horizon.generation._approvals import Approvals, PromoteFn
 from horizon.generation._brief import CandidateGoal, DirectionBrief
-from horizon.generation._evidence import EvidencePacket
+from horizon.generation._evidence import EvidencePacket, evidence_id
+from horizon.generation._gate import GovernanceGate
 from horizon.generation._proposal import Proposal, ProposalStore, proposal_id
 from horizon.generation._reconciler import Reconciler
 from horizon.generation._scout import CandidateOpportunity
+from horizon.generation._sources import (
+    EvidenceBus,
+    Fetcher,
+    InternalSource,
+    SeedSource,
+    SourceAdapter,
+    WebMarketSource,
+)
 
 __all__ = [
     "Approvals",
     "CandidateGoal",
     "CandidateOpportunity",
     "DirectionBrief",
+    "EvidenceBus",
     "EvidencePacket",
+    "Fetcher",
+    "GovernanceGate",
+    "InternalSource",
     "PromoteFn",
     "Proposal",
     "ProposalStore",
     "Reconciler",
+    "SeedSource",
+    "SourceAdapter",
+    "WebMarketSource",
+    "evidence_id",
     "proposal_id",
 ]

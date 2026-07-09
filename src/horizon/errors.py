@@ -25,3 +25,7 @@ class UnknownProposal(HorizonError):
 
 class ProposalNotOpen(HorizonError):
     """Raised when approving/rejecting a proposal that is no longer 'proposed'."""
+
+
+class EgressBlocked(HorizonError):
+    """Raised when the governance gate refuses an external fetch (host / credential / size)."""

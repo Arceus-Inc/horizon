@@ -29,3 +29,7 @@ class ProposalNotOpen(HorizonError):
 
 class EgressBlocked(HorizonError):
     """Raised when the governance gate refuses an external fetch (host / credential / size)."""
+
+
+class GenerationError(HorizonError):
+    """Raised when a scout/analyst LLM reply cannot be parsed into the expected structured output."""

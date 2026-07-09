@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Horizon — What it can do now</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --ink:#0f172a; --muted:#5b6472; --line:#e5e8ef;
+    --brand:#4f46e5; --brand-soft:#eef2ff; --brand-line:#c7d2fe; --brand-ink:#3730a3;
+    --ok:#0f766e; --ok-soft:#ecfdf5; --warn:#b45309; --warn-soft:#fffbeb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1040px;margin:0 auto;padding:44px 24px 72px;}
+  .eyebrow{font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand);font-weight:700;}
+  h1{font-size:34px;line-height:1.15;margin:10px 0 6px;letter-spacing:-.02em;}
+  .lede{font-size:18px;color:var(--muted);margin:0 0 4px;max-width:70ch;}
+  .spine{font-size:14px;color:var(--muted);margin:14px 0 0;padding:12px 16px;background:var(--brand-soft);
+    border:1px solid var(--brand-line);border-radius:12px;}
+  .spine b{color:var(--brand-ink);}
+  h2{font-size:13px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+    margin:44px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h3{margin:0 0 4px;font-size:16.5px;}
+  p{margin:0 0 10px;}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;}
+  .card .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--brand-ink);background:var(--brand-soft);border:1px solid var(--brand-line);
+    border-radius:999px;padding:2px 9px;margin-bottom:10px;}
+  .card p{font-size:14px;color:var(--ink);}
+  .card .why{font-size:13px;color:var(--muted);margin-top:8px;}
+  .card .why b{color:var(--ok);}
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;margin:8px 0 4px;}
+  .step{flex:1 1 150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;}
+  .step .n{font-size:11px;font-weight:700;color:var(--brand);letter-spacing:.08em;text-transform:uppercase;}
+  .step h4{margin:6px 0 2px;font-size:15px;}
+  .step small{color:var(--muted);font-size:12.5px;}
+  .arrow{align-self:center;color:var(--brand-line);font-size:22px;font-weight:800;}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;overflow:hidden;font-size:14px;}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{background:#fafbff;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+  tr:last-child td{border-bottom:none;}
+  td b{color:var(--ink);}
+  .owner{font-weight:700;}
+  .owner.h{color:var(--brand-ink);} .owner.c{color:#0369a1;} .owner.d{color:#7c3aed;}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 0;}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 15px;
+    color:var(--muted);font-size:12.5px;min-width:120px;}
+  .chip span{display:block;font-size:22px;font-weight:750;color:var(--ink);line-height:1.15;}
+  .tech li{margin:0 0 8px;}
+  .tech code{background:#f1f3f9;border:1px solid var(--line);border-radius:6px;padding:1px 6px;
+    font:12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#3730a3;}
+  pre{background:#0f172a;color:#e2e8f0;border-radius:12px;padding:16px 18px;overflow:auto;
+    font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  pre .c{color:#7dd3fc;} pre .k{color:#c4b5fd;}
+  .status{display:flex;flex-wrap:wrap;gap:10px;}
+  .pill{font-size:12.5px;padding:5px 12px;border-radius:999px;border:1px solid;}
+  .pill.ok{background:var(--ok-soft);border-color:#a7f3d0;color:var(--ok);}
+  .pill.now{background:var(--brand-soft);border-color:var(--brand-line);color:var(--brand-ink);}
+  .pill.next{background:var(--warn-soft);border-color:#fde68a;color:var(--warn);}
+  footer{color:var(--muted);font-size:12px;text-align:center;margin-top:48px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Horizon · the strategy layer · capability report</div>
+    <h1>What Horizon can do now</h1>
+    <p class="lede">Horizon turns a leader's strategic <b>decision</b> into measurable goals, gets them
+      executed, and keeps steering as real results land — so a decision doesn't die in a doc, it ships.</p>
+    <div class="spine"><b>The spine:</b> Decision → Goal → Task.
+      &nbsp;dream completes one task · chorus runs the org that ships a sprint ·
+      <b>horizon decides what the company should do next</b> — and closes the loop when the work lands.</div>
+  </header>
+
+  <!-- ============================ THE PROBLEM ============================ -->
+  <h2>The gap it closes</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Before horizon</h3>
+      <p>A strategy decision ("grow profit by concentrating sales investment") lands as a paragraph.
+        Someone hand-translates it into tasks, guesses priorities, and there is no thread back from
+        "the work finished" to "was the strategy right." Direction drifts silently.</p>
+    </div>
+    <div class="card">
+      <h3>With horizon</h3>
+      <p>The decision is a first-class object. Horizon decomposes it into concrete, measurable goals,
+        submits them for execution at the right priority, and folds every real verdict back into a live
+        picture of which goals are on track, drifting, or blocked — and re-attempts the ones that fail.</p>
+    </div>
+  </div>
+
+  <!-- ============================ CAPABILITIES (PRODUCT) ============================ -->
+  <h2>Capabilities today — the product</h2>
+  <div class="grid">
+
+    <div class="card">
+      <span class="tag">Decompose</span>
+      <h3>Turn a decision into measurable goals</h3>
+      <p>Give horizon a strategic decision in plain language. It uses an LLM to break it into a handful of
+        concrete goals — each with a <b>title, metric, target, and rationale</b> — not vague intentions.</p>
+      <p class="why"><b>Why it matters:</b> strategy becomes executable and measurable on day one, with no
+        manual translation step.</p>
+    </div>
+
+    <div class="card">
+      <span class="tag">Grounded</span>
+      <h3>Stay grounded in what the org actually has</h3>
+      <p>Decomposition is anchored to a supplied context (the real data, systems, and constraints), so
+        horizon won't invent goals that depend on data sources or capabilities that don't exist.</p>
+      <p class="why"><b>Why it matters:</b> goals are achievable, not aspirational fiction — the team never
+        chases work it can't do.</p>
+    </div>
+
+    <div class="card">
+      <span class="tag">Prioritise</span>
+      <h3>Rank and submit for execution</h3>
+      <p>Every goal gets a score that maps to an execution <b>priority</b> (high / medium / low). Horizon
+        submits the ranked goals straight into the execution layer as ready-to-run work.</p>
+      <p class="why"><b>Why it matters:</b> the most valuable work rises to the top automatically, and the
+        strategy layer and the delivery layer stay in sync.</p>
+    </div>
+
+    <div class="card">
+      <span class="tag">Idempotent</span>
+      <h3>Never duplicate work</h3>
+      <p>Each goal carries a stable fingerprint. Re-running the loop, retrying, or re-submitting never
+        spawns a second copy of the same task.</p>
+      <p class="why"><b>Why it matters:</b> safe to run continuously — no accidental double-staffing or
+        duplicated spend.</p>
+    </div>
+
+    <div class="card">
+      <span class="tag">Close the loop</span>
+      <h3>Learn from real outcomes</h3>
+      <p>When work lands with a real pass / fail verdict, horizon folds it back in: the goal's health and
+        score update and its priority is rewritten. Every event is accounted for — nothing is silently
+        dropped.</p>
+      <p class="why"><b>Why it matters:</b> direction is driven by what actually shipped, not by opinion —
+        the loop is a measurable system, not a conversation.</p>
+    </div>
+
+    <div class="card">
+      <span class="tag">Health &amp; drift</span>
+      <h3>Know what's on track, drifting, or blocked</h3>
+      <p>Horizon maintains a health model per goal (on&nbsp;track / drifting / blocked) from its pass rate,
+        and a <b>staleness sweep</b> quietly loses trust in goals last verified long ago — resurfacing
+        them before they rot.</p>
+      <p class="why"><b>Why it matters:</b> problems surface early and old "green" goals can't hide stale.</p>
+    </div>
+
+    <div class="card">
+      <span class="tag">Self-heal</span>
+      <h3>Recover failed goals automatically</h3>
+      <p>A goal that fails is re-opened as a fresh attempt that carries <b>why it failed</b> into the next
+        run, and tells the worker its earlier files, scripts, and outputs are still in the workspace — so
+        each retry builds on the last instead of starting blind. The loop repeats until the goal is done or
+        attempts run out.</p>
+      <p class="why"><b>Why it matters:</b> the system pushes goals to completion end-to-end instead of
+        leaving a trail of blocked work.</p>
+    </div>
+
+    <div class="card">
+      <span class="tag">Direction</span>
+      <h3>A live read of the whole decision</h3>
+      <p>At any moment, ask horizon for the current direction: every goal with its score, priority, health,
+        status, and the task realizing it — a single, honest picture of where the sprint stands.</p>
+      <p class="why"><b>Why it matters:</b> leaders get an always-current status without chasing updates.</p>
+    </div>
+
+    <div class="card">
+      <span class="tag">Transparency</span>
+      <h3>Full-transparency reporting</h3>
+      <p>Horizon can emit a report that shows every decision it made and why — the raw prompt and LLM
+        output, the exact score→priority and health arithmetic, the real verdicts, the deliverable the
+        worker produced (e.g. a <code>findings.md</code>), and a <b>per-employee tools &amp; operations
+        log</b> (which tools were used, how many calls, errors, tokens, time).</p>
+      <p class="why"><b>Why it matters:</b> the strategy loop is fully auditable — you can see exactly how a
+        decision turned into shipped work.</p>
+    </div>
+
+  </div>
+
+  <!-- ============================ THE LOOP ============================ -->
+  <h2>How the loop runs</h2>
+  <div class="flow">
+    <div class="step"><div class="n">1 · Seed</div><h4>Decision</h4><small>a strategic anchor in plain language</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">2 · Decompose</div><h4>Goals</h4><small>LLM → measurable goals, grounded in real context</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">3 · Submit</div><h4>Ranked work</h4><small>score → priority, into execution (idempotent)</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">4 · Fold</div><h4>Outcomes</h4><small>real verdicts → health + score + re-priority</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">5 · Steer</div><h4>Recover / resurface</h4><small>retry failures, sweep stale, re-rank</small></div>
+  </div>
+  <p style="color:var(--muted);font-size:13.5px;margin-top:12px;">Steps 4–5 feed back into the ranking, so
+    the loop converges: passing goals decay and step aside; failing or stale goals surface and get another,
+    better-informed attempt.</p>
+
+  <!-- ============================ WHO OWNS WHAT ============================ -->
+  <h2>Who owns what</h2>
+  <table>
+    <tr><th>Layer</th><th>Owns</th><th>Horizon's relationship</th></tr>
+    <tr>
+      <td class="owner h">horizon</td>
+      <td><b>Strategy</b> — decisions, decomposition, ranking, outcome policy, health &amp; direction.</td>
+      <td>This library. Owns the "what" and "why."</td>
+    </tr>
+    <tr>
+      <td class="owner c">chorus</td>
+      <td><b>Execution</b> — schedules and runs the org's beats, lands artifacts and DoD verdicts.</td>
+      <td>A sibling. Horizon submits goals to it and reads its verdicts — never imports or schedules it.</td>
+    </tr>
+    <tr>
+      <td class="owner d">dream</td>
+      <td><b>The agent loop</b> — completes a single task with tools inside one worktree.</td>
+      <td>Two layers down. Horizon never runs it; it only observes the outcome.</td>
+    </tr>
+  </table>
+  <p style="color:var(--muted);font-size:13.5px;margin-top:12px;"><b>The rule:</b> horizon owns the
+    decision and never rewrites it. When a goal struggles, its levers are the worker's brief, tools, and
+    priority — the "how" stays with the worker.</p>
+
+  <!-- ============================ UNDER THE HOOD (TECH) ============================ -->
+  <h2>Under the hood — the tech</h2>
+  <ul class="tech">
+    <li><b>Ports &amp; adapters.</b> Horizon binds only to three typed Protocols —
+      <code>GoalStore</code>, <code>IntakePort</code>, <code>OutcomeFeed</code> — plus a minimal
+      <code>Reasoner</code>. A single composition root wires it to a real backend; the core stays pure and
+      swappable.</li>
+    <li><b>Structured LLM outputs.</b> Anything the system parses (goal decomposition) uses strict
+      <code>json_schema</code> responses, with a tolerant fallback — verified live against Azure OpenAI
+      <code>gpt-5.2</code>.</li>
+    <li><b>Model-agnostic.</b> The reasoner is just a <code>complete()</code> seam — a real substrate, a
+      fake, or any OpenAI-compatible endpoint all work the same.</li>
+    <li><b>Observable by construction.</b> Every landed event is classified
+      <code>handled / dropped / deferred</code> and exposed via <code>listener_stats()</code> — the wiring
+      proves it's live instead of failing silently.</li>
+    <li><b>Its own store.</b> Strategy state (decisions + per-goal strategy records) lives in horizon's own
+      <code>.horizon/</code> stores keyed by goal id — it never mutates the execution layer's data model.</li>
+    <li><b>Quality bar.</b> Type-safe under <code>mypy --strict</code>, <code>ruff</code> clean, and 77
+      passing tests including a public-API pin, integration tests, and a live capstone.</li>
+  </ul>
+
+  <!-- ============================ WHAT YOU CAN RUN ============================ -->
+  <h2>What you can run today</h2>
+  <div class="grid">
+    <div class="card">
+      <span class="tag">CLI</span>
+      <h3>Offline, over horizon's own stores</h3>
+<pre><span class="c"># seed a decision, then inspect direction</span>
+uv run horizon seed <span class="k">"Grow profit by focusing sales investment"</span>
+uv run horizon decisions
+uv run horizon show</pre>
+    </div>
+    <div class="card">
+      <span class="tag">SDK</span>
+      <h3>Drive the full loop in code</h3>
+<pre>horizon.seed_decision(decision)
+horizon.decompose(decision.id)     <span class="c"># LLM → goals</span>
+horizon.submit_decision(decision.id)
+horizon.start()                    <span class="c"># outcomes → health + re-priority</span>
+horizon.recover()                  <span class="c"># retry failed goals</span>
+horizon.sweep_staleness()          <span class="c"># resurface stale goals</span>
+horizon.state()                    <span class="c"># the live direction</span></pre>
+    </div>
+  </div>
+  <div class="grid" style="margin-top:16px;">
+    <div class="card">
+      <span class="tag">Demos</span>
+      <h3>See the loop end-to-end</h3>
+      <p><code>examples/demo_offline.py</code> — deterministic, real wiring, synthetic verdicts.<br>
+         <code>examples/demo_live.py</code> — real LLM + a real Analyst beat closing the loop.<br>
+         <code>examples/strong_run.py</code> — the instrumented capstone (the HTML report with the
+         per-employee ops log).</p>
+    </div>
+    <div class="card">
+      <span class="tag">Proven live</span>
+      <h3>Latest capstone run</h3>
+      <div class="chips">
+        <div class="chip"><span>5</span>goals decomposed (LLM)</div>
+        <div class="chip"><span>3/3</span>beats passed end-to-end</div>
+        <div class="chip"><span>202</span>worker operations logged</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ MATURITY ============================ -->
+  <h2>Maturity</h2>
+  <div class="status">
+    <span class="pill ok">✓ Decompose · prioritise · submit</span>
+    <span class="pill ok">✓ Outcome feedback → health + re-priority</span>
+    <span class="pill ok">✓ Recovery loop (end-to-end)</span>
+    <span class="pill ok">✓ Staleness sweep</span>
+    <span class="pill ok">✓ Structured LLM outputs</span>
+    <span class="pill ok">✓ Full-transparency report + ops log</span>
+    <span class="pill now">◐ Multi-decision portfolio view</span>
+    <span class="pill next">→ Goal → multi-task splitting (via a chorus manager)</span>
+    <span class="pill next">→ Budget / capacity-aware prioritisation</span>
+  </div>
+
+  <footer>Horizon — the strategy layer that decides the sprint · capability report</footer>
+</div>
+</body>
+</html>

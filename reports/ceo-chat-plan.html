@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Horizon — The CEO: a chattable executive employee</title>
+<style>
+  :root{
+    --bg:#f5f6fb; --card:#ffffff; --ink:#0f172a; --muted:#5a6474; --line:#e4e7ef;
+    --brand:#4f46e5; --brand-soft:#eef2ff; --brand-line:#c7d2fe; --brand-ink:#3730a3;
+    --teal:#0d9488; --teal-soft:#ecfeff; --amber:#b45309; --amber-soft:#fffbeb;
+    --ok:#0f766e; --ok-soft:#ecfdf5; --rose:#be123c; --rose-soft:#fff1f2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 22px 80px;}
+  header.hero{background:linear-gradient(135deg,#1e1b4b,#312e81 55%,#3730a3);color:#fff;
+    border-radius:0 0 22px 22px;padding:48px 40px 40px;margin:0 -22px 32px;}
+  .hero .eyebrow{font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:#c7d2fe;font-weight:700;}
+  .hero h1{margin:12px 0 8px;font-size:34px;line-height:1.12;letter-spacing:-.02em;}
+  .hero p{margin:0;max-width:74ch;color:#e0e7ff;font-size:17px;}
+  .hero .duo{display:flex;gap:12px;margin-top:22px;flex-wrap:wrap;}
+  .hero .duo .pill{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);
+    border-radius:999px;padding:8px 16px;font-size:13.5px;font-weight:600;}
+  h2{font-size:13px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+    margin:44px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h3{margin:0 0 6px;font-size:16.5px;}
+  p{margin:0 0 10px;}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  @media(max-width:760px){.grid,.grid3{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;}
+  .card .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--brand-ink);background:var(--brand-soft);border:1px solid var(--brand-line);
+    border-radius:999px;padding:2px 9px;margin-bottom:10px;}
+  .card.teal .tag{color:var(--teal);background:var(--teal-soft);border-color:#a5f3fc;}
+  .card.amber .tag{color:var(--amber);background:var(--amber-soft);border-color:#fde68a;}
+  .card p{font-size:14px;}
+  .card .why{font-size:12.5px;color:var(--muted);margin-top:8px;}
+  /* chat */
+  .chat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin:6px 0 2px;}
+  .msg{display:flex;gap:10px;margin:10px 0;}
+  .msg .who{flex:0 0 auto;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+    font-weight:800;font-size:12px;color:#fff;}
+  .msg.u .who{background:#64748b;}
+  .msg.c .who{background:var(--brand);}
+  .msg .bub{border-radius:12px;padding:11px 14px;font-size:14px;max-width:80%;}
+  .msg.u .bub{background:#f1f5f9;}
+  .msg.c .bub{background:var(--brand-soft);border:1px solid var(--brand-line);}
+  .msg .bub .cite{display:block;margin-top:7px;font-size:11.5px;color:var(--brand-ink);}
+  .msg .bub .act{display:inline-block;margin-top:9px;font-size:12px;font-weight:700;color:#fff;
+    background:var(--brand);border-radius:8px;padding:5px 11px;}
+  .msg .bub .gate{display:inline-block;margin:9px 0 0 8px;font-size:12px;color:var(--amber);
+    background:var(--amber-soft);border:1px solid #fde68a;border-radius:8px;padding:5px 10px;}
+  /* flow */
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin:6px 0;}
+  .step{flex:1 1 130px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
+  .step .n{font-size:10.5px;font-weight:700;color:var(--brand);letter-spacing:.08em;text-transform:uppercase;}
+  .step h4{margin:5px 0 2px;font-size:14px;}
+  .step small{color:var(--muted);font-size:12px;}
+  .arrow{align-self:center;color:var(--brand-line);font-size:20px;font-weight:800;}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;overflow:hidden;font-size:13.5px;}
+  th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{background:#fafbff;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+  tr:last-child td{border-bottom:none;}
+  td b{color:var(--ink);}
+  code{background:#f1f3f9;border:1px solid var(--line);border-radius:6px;padding:1px 6px;
+    font:12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#3730a3;}
+  .layers{display:flex;flex-direction:column;gap:10px;}
+  .layer{display:flex;gap:14px;align-items:flex-start;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;padding:14px 16px;}
+  .layer .lk{flex:0 0 132px;font-weight:750;color:var(--brand-ink);font-size:13.5px;}
+  .layer .lv{font-size:13.5px;color:var(--ink);}
+  .layer .lv small{color:var(--muted);}
+  .pillrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+  .chip{font-size:12.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted);}
+  .chip.r{background:var(--teal-soft);border-color:#a5f3fc;color:var(--teal);}
+  .chip.w{background:var(--rose-soft);border-color:#fecdd3;color:var(--rose);}
+  .chip.b{background:var(--brand-soft);border-color:var(--brand-line);color:var(--brand-ink);}
+  .status{display:flex;flex-wrap:wrap;gap:9px;}
+  .mstone{display:flex;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;}
+  .mstone .mn{flex:0 0 auto;width:52px;height:26px;border-radius:8px;background:var(--brand);color:#fff;font-weight:800;font-size:12.5px;display:grid;place-items:center;}
+  .note{background:var(--amber-soft);border:1px solid #fde68a;border-radius:12px;padding:12px 16px;font-size:13.5px;color:#7c5410;}
+  footer{color:var(--muted);font-size:12px;text-align:center;margin-top:48px;}
+  .lead{font-size:16px;color:var(--muted);max-width:74ch;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">Horizon · Theme D · design plan</div>
+    <h1>The CEO — a chattable executive employee</h1>
+    <p>One identity with two faces: a <b>conversation</b> you talk to about the entire company, and a
+       real <b>employee</b> that runs high-level beats — governance, decisions, reviews. It is
+       <b>informative</b> (answers grounded in live company state), <b>directive</b> (drafts and drives
+       decisions, gated by your approval), and <b>remembering</b> (a persistent memory of every
+       conversation, decision, and directive).</p>
+    <div class="duo">
+      <span class="pill">💬 Chat surface — ask it anything about the company</span>
+      <span class="pill">🧑‍✈️ Executive employee — runs governance &amp; decision beats</span>
+      <span class="pill">🧠 Memory store — remembers, recalls, and decays</span>
+    </div>
+  </header>
+
+  <p class="lead">The CEO sits at the very top of the <b>Decision → Goal → Task</b> spine. Below it,
+    horizon decomposes decisions, chorus runs the org, dream completes tasks. The CEO is the human's
+    single point of contact with all of it — and, uniquely, it can also <em>act</em> as a bounded
+    employee when the work itself is executive.</p>
+
+  <!-- ============================ DUAL NATURE ============================ -->
+  <h2>The dual nature</h2>
+  <div class="grid">
+    <div class="card">
+      <span class="tag">Face 1 · Chat</span>
+      <h3>You talk to it</h3>
+      <p>A live conversation. Ask about strategy, status, risks, people, spend, a specific decision or
+        goal — it answers from the real company state, cites its sources, and can <em>act</em> on your
+        instruction (draft a decision, approve a proposal, re-prioritise) behind a confirm gate.</p>
+      <p class="why">Informative + directive, always grounded, never auto-applying a write.</p>
+    </div>
+    <div class="card teal">
+      <span class="tag">Face 2 · Employee</span>
+      <h3>It runs beats</h3>
+      <p>The CEO is a real chorus employee (<code>role="ceo"</code>) that can be handed <b>very
+        high-level tasks</b> — a governance audit, a quarterly decision review, adjudicating the funnel's
+        proposals, a risk assessment — and runs them as bounded beats with executive-grade tools.</p>
+      <p class="why">The same identity, memory, and context back both the chat and the beat.</p>
+    </div>
+  </div>
+
+  <!-- ============================ INFORMATIVE ============================ -->
+  <h2>Informative — answers about the entire company</h2>
+  <p>Every answer is grounded in live state and <b>cites where it came from</b> (a goal id, a task
+    verdict, a ledger row, a memory). No vibes — evidence.</p>
+  <div class="chat">
+    <div class="msg u"><div class="who">You</div><div class="bub">Where does the company stand this
+      sprint? What's at risk?</div></div>
+    <div class="msg c"><div class="who">CEO</div><div class="bub">Two active decisions. <b>“Grow profit
+      by focusing sales investment”</b> is on track — 3 of 5 goals landed clean. One goal, <i>robustness
+      checks</i>, is <b>blocked</b>: it failed its DoD across all 3 recovery rounds — the analyst can't
+      satisfy the statistical bar from Q1–Q3 data alone. That's your one real risk this sprint.
+      <span class="cite">◦ sources: decision <code>dec_strong</code> · goal <code>goal_2b3f…</code> (health=blocked, 4 fails) · 3 recovery beats</span></div></div>
+    <div class="msg u"><div class="who">You</div><div class="bub">Why did the funnel pick mid-market last
+      week?</div></div>
+    <div class="msg c"><div class="who">CEO</div><div class="bub">The scout clustered live market
+      evidence into three theses; the analyst's mid-market brief scored highest confidence (0.74) and
+      cited the Grand View + adoption-by-size sources. You approved it on 2026-07-10 — I recorded your
+      rationale as “one focused bet, best inbound signal.”
+      <span class="cite">◦ sources: proposal <code>prop_8bca…</code> · brief confidence 0.74 · memory: decision-log/2026-07-10</span></div></div>
+  </div>
+  <div class="grid3" style="margin-top:16px">
+    <div class="card"><h3>Strategy &amp; direction</h3><p>“What are we betting on and why?” — the whole
+      Decision→Goal→Task tree with health, priority, and the realizing tasks.</p></div>
+    <div class="card"><h3>Execution &amp; risk</h3><p>“What's blocked / drifting / stale?” — landed DoD
+      verdicts, recovery attempts, the per-employee ops logs, timeouts.</p></div>
+    <div class="card"><h3>People, spend, product</h3><p>“Who did what, at what cost?” — employees, token
+      spend, artifacts produced, the repo/product state, commitments made.</p></div>
+  </div>
+
+  <!-- ============================ DIRECTIVE ============================ -->
+  <h2>Directive — it drives, you approve</h2>
+  <p>The CEO doesn't just report — it <b>proposes and executes strategy</b>. Every write is a
+    <b>confirm-to-write</b> action producing an auditable diff + evidence; nothing auto-applies.</p>
+  <div class="chat">
+    <div class="msg u"><div class="who">You</div><div class="bub">The robustness goal is stuck. Kill it
+      and double down on the memo instead.</div></div>
+    <div class="msg c"><div class="who">CEO</div><div class="bub">Agreed — it's failed 4× and is burning
+      beats. I'll archive the robustness goal and raise the executive-memo goal to <b>high</b>. Here's the
+      diff:
+      <span class="cite">− goal <code>goal_2b3f…</code> robustness → archived &nbsp; ↑ goal <code>goal_0945…</code> memo → priority high</span>
+      <span class="act">▶ Apply (confirm)</span><span class="gate">⨯ Needs your approval — not yet written</span></div></div>
+    <div class="msg u"><div class="who">You</div><div class="bub">Approve.</div></div>
+    <div class="msg c"><div class="who">CEO</div><div class="bub">Done. Archived the goal, re-prioritised
+      the memo, and logged the directive to memory (“drop robustness, prioritise the deliverable”). It'll
+      inform how I decompose similar decisions next time.
+      <span class="cite">◦ wrote: strategy store · chorus task.priority · memory: directives/2026-07-10</span></div></div>
+  </div>
+  <div class="grid" style="margin-top:16px">
+    <div class="card amber"><span class="tag">Gated writes</span><h3>What it can do — always confirmed</h3>
+      <p>Draft &amp; seed a <b>decision</b> · approve/reject a funnel <b>proposal</b> · re-prioritise or
+        archive a <b>goal</b> · open a <b>governance beat</b> · record a standing <b>directive</b>.</p>
+      <p class="why">Each produces a preview diff + evidence refs; the write happens only on your confirm.</p></div>
+    <div class="card teal"><span class="tag">Escalation</span><h3>When it acts on its own</h3>
+      <p>Within standing directives you've pre-approved (e.g. “auto-approve proposals above 0.8
+        confidence with ≥3 evidence refs”), it may act and <b>report after</b> — every autonomous action
+        still writes an auditable record.</p>
+      <p class="why">You set the leash; it stays inside it.</p></div>
+  </div>
+
+  <!-- ============================ CONTEXT ============================ -->
+  <h2>The CEO's context — what it knows at chat time</h2>
+  <p>Before every turn, a <b>context assembler</b> gathers a bounded, ranked snapshot of the whole
+    company. This is the difference between an executive and a chatbot.</p>
+  <table>
+    <tr><th>Context source</th><th>What it contributes</th><th>From</th></tr>
+    <tr><td><b>Direction tree</b></td><td>Every decision → goal with score, priority, health, status, task</td><td>horizon read model (<code>state()</code>)</td></tr>
+    <tr><td><b>Execution ledger</b></td><td>Tasks, DoD verdicts, recovery attempts, blocked/stale flags</td><td>chorus ledger</td></tr>
+    <tr><td><b>Funnel queue</b></td><td>Proposals awaiting approval + their briefs + evidence</td><td>horizon <code>ProposalStore</code></td></tr>
+    <tr><td><b>Operations</b></td><td>Per-employee tool/LLM usage, cost, errors, timeouts</td><td>dream sidecar traces</td></tr>
+    <tr><td><b>People &amp; workload</b></td><td>Employees, roles, in-flight load, who did what</td><td>chorus workforce</td></tr>
+    <tr><td><b>Product &amp; repo</b></td><td>What's been built, the codebase/artifacts state</td><td>worktrees / artifact store</td></tr>
+    <tr><td><b>Memory</b></td><td>Past conversations, decisions + rationale, standing directives, org facts</td><td>CEO memory store</td></tr>
+    <tr><td><b>External signal</b></td><td>Market/web evidence (governed egress)</td><td>the funnel's <code>GovernanceGate</code> + Tavily</td></tr>
+  </table>
+  <p class="why" style="margin-top:10px;color:var(--muted)">The assembler ranks + trims to a token budget
+    (recency × relevance to the question × importance), so the CEO always has the <em>right</em> slice,
+    not the whole firehose.</p>
+
+  <!-- ============================ TOOLS ============================ -->
+  <h2>The CEO's tools</h2>
+  <div class="grid3">
+    <div class="card teal"><span class="tag">Read</span><h3>To answer</h3>
+      <div class="pillrow">
+        <span class="chip r">query_direction</span><span class="chip r">query_ledger</span>
+        <span class="chip r">inspect_goal</span><span class="chip r">list_proposals</span>
+        <span class="chip r">read_artifact</span><span class="chip r">recall_memory</span>
+        <span class="chip r">ops_report</span><span class="chip r">web_search (gated)</span>
+      </div></div>
+    <div class="card amber"><span class="tag">Write · gated</span><h3>To direct</h3>
+      <div class="pillrow">
+        <span class="chip w">draft_decision</span><span class="chip w">seed_decision</span>
+        <span class="chip w">approve_proposal</span><span class="chip w">reject_proposal</span>
+        <span class="chip w">set_priority</span><span class="chip w">archive_goal</span>
+        <span class="chip w">record_directive</span><span class="chip w">write_memory</span>
+      </div></div>
+    <div class="card"><span class="tag">Beat</span><h3>To govern</h3>
+      <div class="pillrow">
+        <span class="chip b">run_governance_audit</span><span class="chip b">review_decision</span>
+        <span class="chip b">adjudicate_proposals</span><span class="chip b">risk_review</span>
+        <span class="chip b">quarterly_plan</span>
+      </div></div>
+  </div>
+  <div class="note" style="margin-top:14px">Every <b>write</b> tool returns a <em>preview</em> (a diff +
+    evidence), never an immediate mutation. The confirm step is the single door from “the CEO suggested”
+    to “the company changed” — the same proposal-only invariant the generation funnel already enforces.</div>
+
+  <!-- ============================ MEMORY ============================ -->
+  <h2>Memory — informative, directive, and persistent</h2>
+  <p>The CEO's memory is what makes it feel like the same executive across sessions. Four layers, each
+    retrievable by the assembler and each with its own decay.</p>
+  <div class="layers">
+    <div class="layer"><div class="lk">Conversation</div><div class="lv">Rolling chat history +
+      periodic summaries. “What did we discuss last week?” <small>— decays fast; summarized, not verbatim, after N turns.</small></div></div>
+    <div class="layer"><div class="lk">Decision log</div><div class="lv">Every decision + its rationale,
+      who approved it, and how it turned out. “Why did we choose mid-market?” <small>— long-lived; the audit trail of strategy.</small></div></div>
+    <div class="layer"><div class="lk">Directives</div><div class="lv">Standing instructions &amp;
+      preferences you've given (“always prioritise the deliverable over analysis polish”). <small>— persistent; shapes future decompositions + auto-approvals.</small></div></div>
+    <div class="layer"><div class="lk">Org facts</div><div class="lv">Durable truths about the company —
+      product, market position, constraints, people. <small>— slow-changing; the CEO's world model.</small></div></div>
+  </div>
+  <div class="grid" style="margin-top:14px">
+    <div class="card"><h3>How it writes</h3><p>After a turn, the CEO distills what's worth keeping — a
+      decision made, a directive given, a fact learned — into the right layer (a <code>write_memory</code>
+      gated for directives, automatic for the decision log).</p></div>
+    <div class="card"><h3>How it recalls</h3><p>The assembler retrieves by relevance to the current
+      question (semantic + recency + importance), so a passing mention months ago resurfaces exactly
+      when it matters — and stale, superseded memories fade.</p></div>
+  </div>
+
+  <!-- ============================ CEO AS EMPLOYEE ============================ -->
+  <h2>The CEO as an employee — executive beats</h2>
+  <p>Uniquely, the CEO can be <b>handed a task</b> and run it as a bounded beat — but only work that is
+    genuinely executive. It shares the chat's context, tools, and memory, so a beat is just “the CEO
+    thinking hard, unattended, and writing back a directive-grade result.”</p>
+  <div class="grid3">
+    <div class="card"><span class="tag">Governance</span><h3>Governance audit</h3><p>Scan the whole
+      tree + ledger for drift, stale goals, runaway cost, blocked work; produce a findings memo + a set
+      of proposed corrections (gated).</p></div>
+    <div class="card"><span class="tag">Decision</span><h3>Decision authoring</h3><p>Given a mission +
+      evidence, author a full decision (or adjudicate the funnel's proposals) with rationale and risks —
+      the top of the spine, written by the top of the org.</p></div>
+    <div class="card"><span class="tag">Review</span><h3>Quarterly / risk review</h3><p>Roll up the
+      sprint: what shipped, what it cost, what's at risk, what to change next quarter — an executive
+      report a human board could read.</p></div>
+  </div>
+  <div class="note" style="margin-top:14px">Guardrail: the CEO beat's <b>outputs are still gated</b>.
+    A governance audit <em>proposes</em> corrections; a human (or a standing directive) confirms them.
+    The CEO can think autonomously; it can't unilaterally rewrite the company.</div>
+
+  <!-- ============================ TURN ANATOMY ============================ -->
+  <h2>Anatomy of a turn (chat or beat)</h2>
+  <div class="flow">
+    <div class="step"><div class="n">1 · Assemble</div><h4>Context</h4><small>rank + trim live company state to a budget</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">2 · Recall</div><h4>Memory</h4><small>retrieve relevant past decisions, directives, facts</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">3 · Reason</div><h4>Answer + intent</h4><small>informative reply, and any proposed actions</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">4 · Gate</div><h4>Confirm</h4><small>preview diff + evidence; human approves writes</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">5 · Act + learn</div><h4>Write</h4><small>apply the write, then update memory</small></div>
+  </div>
+
+  <!-- ============================ ARCHITECTURE ============================ -->
+  <h2>Where it lives (architecture)</h2>
+  <table>
+    <tr><th>Piece</th><th>Home</th><th>Role</th></tr>
+    <tr><td><b>CEO chat + context assembler</b></td><td>horizon <code>chat/</code></td><td>the conversation, the assembler, the tool router, the confirm gate</td></tr>
+    <tr><td><b>CEO memory store</b></td><td>horizon <code>chat/_memory.py</code> (own store, keyed by layer)</td><td>conversation / decision-log / directives / org-facts</td></tr>
+    <tr><td><b>CEO tools</b></td><td>horizon (read = the read model + funnel; write = the facade's gated methods)</td><td>reuses <code>state()</code>, <code>reconcile/approve</code>, <code>set_priority</code>, <code>seed_decision</code></td></tr>
+    <tr><td><b>CEO employee (beats)</b></td><td>chorus <code>role="ceo"</code></td><td>a bounded dream beat with the CEO's tools + executive skills</td></tr>
+    <tr><td><b>The seam</b></td><td><code>dream.contracts</code> + the composition root</td><td>no sideways import; the CEO writes through the one intake door + the read model</td></tr>
+  </table>
+  <p class="why" style="margin-top:10px;color:var(--muted)">The CEO invents nothing new about the data
+    model — it's a <b>conversational + executive skin</b> over horizon's read model, the funnel's
+    proposal gate, and chorus's employee/beat machinery. Everything it can “do” already exists as a gated
+    facade method; the chat just makes it addressable in natural language, with memory.</p>
+
+  <!-- ============================ BUILD PLAN ============================ -->
+  <h2>Build plan (incremental)</h2>
+  <div class="mstone"><div class="mn">D1</div><div><b>Context assembler + read-only chat.</b> Assemble
+    the tree/ledger/proposals/ops into a bounded context; a chat that answers questions with citations.
+    No writes yet. <i>Proves: the CEO is informative and grounded.</i></div></div>
+  <div class="mstone"><div class="mn">D2</div><div><b>Memory store.</b> The four layers + write/recall;
+    the assembler pulls relevant memory into each turn. <i>Proves: it remembers across sessions.</i></div></div>
+  <div class="mstone"><div class="mn">D3</div><div><b>Directive chat (confirm-to-write).</b> The gated
+    write tools (draft/seed decision, approve proposal, set priority, archive goal, record directive) with
+    preview diffs. <i>Proves: it's directive, safely.</i></div></div>
+  <div class="mstone"><div class="mn">D4</div><div><b>CEO as employee.</b> The <code>role="ceo"</code>
+    chorus beat: governance audit + decision review, sharing the chat's context/tools/memory. <i>Proves:
+    it can beat on executive work.</i></div></div>
+  <div class="mstone"><div class="mn">D5</div><div><b>Standing directives + bounded autonomy.</b>
+    Pre-approved rules let it act and report-after; a capstone: a signal → CEO audit → proposed
+    corrections → your one-tap approval → the org re-aims. <i>Proves: the whole executive loop.</i></div></div>
+
+  <!-- ============================ OPEN QUESTIONS ============================ -->
+  <h2>Open questions (defaults to decide)</h2>
+  <div class="grid">
+    <div class="card"><h3>Memory backend</h3><p>Start file-backed + keyword/recency recall (like the
+      existing stores); add embeddings for semantic recall when the decision log grows. <b>Default: files first.</b></p></div>
+    <div class="card"><h3>Autonomy leash</h3><p>How much can standing directives pre-authorise? <b>Default:
+      read + propose freely; writes need confirm unless a directive explicitly pre-approves a narrow class.</b></p></div>
+    <div class="card"><h3>Chat ↔ beat identity</h3><p>One CEO identity backing both, or a “chat CEO” that
+      dispatches beats to itself? <b>Default: one identity, one memory; a beat is an unattended turn.</b></p></div>
+    <div class="card"><h3>Context budget</h3><p>How much company state per turn? <b>Default: rank by
+      recency × relevance × importance, trim to a fixed token budget; the assembler owns it.</b></p></div>
+  </div>
+
+  <footer>Horizon · the CEO — a chattable executive employee · design plan (Theme D)</footer>
+</div>
+</body>
+</html>

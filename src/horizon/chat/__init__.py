@@ -9,6 +9,7 @@ Memory, gated write tools, and the CEO-as-employee beat land in later slices.
 from __future__ import annotations
 
 from horizon.chat._actions import ActionExecutor, PendingAction
+from horizon.chat._beat import BeatResult, CeoBeat
 from horizon.chat._chat import Answer, CeoChat, ChatStep, Turn
 from horizon.chat._context import (
     CompanyContext,
@@ -35,6 +36,8 @@ __all__ = [
     "WRITE_TOOLS",
     "ActionExecutor",
     "Answer",
+    "BeatResult",
+    "CeoBeat",
     "CeoChat",
     "CeoMemory",
     "ChatStep",

@@ -19,7 +19,14 @@ from typing import Any
 
 from horizon._jsonio import extract_json
 from horizon.chat._context import ContextAssembler
-from horizon.chat._tools import READ_TOOLS, ToolResult, ToolSpec, render_tool_specs
+from horizon.chat._memory import CeoMemory, render_memories
+from horizon.chat._tools import (
+    READ_TOOLS,
+    ToolResult,
+    ToolSpec,
+    make_memory_tools,
+    render_tool_specs,
+)
 from horizon.errors import ChatError
 from horizon.facade import Horizon
 from horizon.planning._reasoner import Reasoner
@@ -107,6 +114,7 @@ class CeoChat:
         reasoner: Reasoner,
         horizon: Horizon,
         tools: dict[str, ToolSpec] | None = None,
+        memory: CeoMemory | None = None,
         model: str | None = None,
         max_steps: int = 6,
         max_output_tokens: int = 4000,
@@ -114,7 +122,11 @@ class CeoChat:
     ) -> None:
         self._reasoner = reasoner
         self._horizon = horizon
-        self._tools = tools if tools is not None else READ_TOOLS
+        self._memory = memory
+        base_tools = dict(tools) if tools is not None else dict(READ_TOOLS)
+        if memory is not None:
+            base_tools.update(make_memory_tools(memory))
+        self._tools = base_tools
         self._model = model
         self._max_steps = max_steps
         self._max_output_tokens = max_output_tokens
@@ -125,6 +137,10 @@ class CeoChat:
         context = ContextAssembler(self._horizon).assemble()
         system = _PERSONA.replace("__TOOLS__", render_tool_specs(self._tools))
         transcript: list[str] = []
+        if self._memory is not None:
+            recalled = render_memories(self._memory.recall(question, limit=4))
+            if recalled:
+                transcript.append(recalled)
         if history:
             transcript.append("EARLIER IN THIS CONVERSATION:")
             for turn in history:
@@ -133,16 +149,18 @@ class CeoChat:
         transcript.append(f"\nQUESTION: {question}")
 
         steps: list[ChatStep] = []
+        answer: Answer | None = None
         for _ in range(self._max_steps):
             prompt = system + "\n\n" + "\n".join(transcript)
             step = self._reason(prompt)
             tool = step["tool"].strip()
             if not tool:
-                return Answer(
+                answer = Answer(
                     text=step["answer_text"].strip(),
                     citations=[str(c) for c in step["citations"]],
                     steps=steps,
                 )
+                break
             result, args = self._run_tool(tool, step["args_json"])
             steps.append(
                 ChatStep(
@@ -156,13 +174,27 @@ class CeoChat:
             transcript.append(
                 f"\nSTEP: called {tool}({json.dumps(args)})\nOBSERVATION:\n{result.observation}"
             )
-        # step budget exhausted — answer from what we have rather than looping forever
-        gathered = [c for s in steps for c in s.citations]
-        return Answer(
-            text="I could not fully resolve that within my step budget. Here is what I found: "
-            + (steps[-1].observation if steps else "nothing conclusive."),
-            citations=list(dict.fromkeys(gathered)),
-            steps=steps,
+        if answer is None:
+            # step budget exhausted — answer from what we have rather than looping forever
+            gathered = [c for s in steps for c in s.citations]
+            answer = Answer(
+                text="I could not fully resolve that within my step budget. Here is what I found: "
+                + (steps[-1].observation if steps else "nothing conclusive."),
+                citations=list(dict.fromkeys(gathered)),
+                steps=steps,
+            )
+        self._remember(question, answer)
+        return answer
+
+    def _remember(self, question: str, answer: Answer) -> None:
+        """Persist the exchange to the conversation layer so the CEO recalls it later."""
+        if self._memory is None:
+            return
+        self._memory.write(
+            "conversation",
+            f"Q: {question}\nA: {answer.text}",
+            tags=answer.citations,
+            importance=0.3,
         )
 
     def _run_tool(self, tool: str, args_json: str) -> tuple[ToolResult, dict[str, Any]]:

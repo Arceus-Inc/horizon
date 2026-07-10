@@ -127,3 +127,27 @@ def render_tool_specs(tools: dict[str, ToolSpec]) -> str:
         for arg, desc in spec.args.items():
             lines.append(f"    · {arg}: {desc}")
     return "\n".join(lines)
+
+
+def make_memory_tools(memory: Any) -> dict[str, ToolSpec]:
+    """Build memory-bound read tools (closure over a ``CeoMemory``) — added when memory is present."""
+
+    def _recall(_horizon: Horizon, args: dict[str, Any]) -> ToolResult:
+        query = str(args.get("query", "")).strip()
+        if not query:
+            return ToolResult(observation="recall_memory needs a 'query' argument.", citations=[])
+        hits = memory.recall(query, limit=6)
+        if not hits:
+            return ToolResult(observation="No relevant memory found.", citations=[])
+        lines = [f"- [{e.layer}] {e.text}" for e in hits]
+        return ToolResult(observation="\n".join(lines), citations=[e.id for e in hits])
+
+    return {
+        "recall_memory": ToolSpec(
+            name="recall_memory",
+            description="Search the CEO's memory (past conversations, decisions, directives, org facts) "
+            "for anything relevant to a query.",
+            args={"query": "what to search memory for"},
+            run=_recall,
+        )
+    }

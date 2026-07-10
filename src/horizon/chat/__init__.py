@@ -16,20 +16,32 @@ from horizon.chat._context import (
     GoalLine,
     ProposalLine,
 )
-from horizon.chat._tools import READ_TOOLS, ToolResult, ToolSpec, render_tool_specs
+from horizon.chat._memory import LAYERS, CeoMemory, MemoryEntry, render_memories
+from horizon.chat._tools import (
+    READ_TOOLS,
+    ToolResult,
+    ToolSpec,
+    make_memory_tools,
+    render_tool_specs,
+)
 
 __all__ = [
+    "LAYERS",
     "READ_TOOLS",
     "Answer",
     "CeoChat",
+    "CeoMemory",
     "ChatStep",
     "CompanyContext",
     "ContextAssembler",
     "DecisionLine",
     "GoalLine",
+    "MemoryEntry",
     "ProposalLine",
     "ToolResult",
     "ToolSpec",
     "Turn",
+    "make_memory_tools",
+    "render_memories",
     "render_tool_specs",
 ]

@@ -128,4 +128,14 @@ def permits(policy: AutonomyPolicy, action: PendingAction, horizon: Horizon) -> 
                     and len(p.brief.evidence_refs) >= policy.min_evidence
                 )
         return False
+    if action.kind == "reject_proposal":
+        # only auto-reject a *clearly* weak proposal (below the confidence or evidence bar)
+        pid = str(action.args.get("proposal_id", ""))
+        for p in horizon.list_proposals(status="proposed"):
+            if p.id == pid and p.brief is not None:
+                return (
+                    p.brief.confidence < policy.min_proposal_confidence
+                    or len(p.brief.evidence_refs) < policy.min_evidence
+                )
+        return False
     return True

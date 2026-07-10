@@ -203,8 +203,9 @@ class CeoChat:
                     observation=observation, citations=cites,
                 )
             )
+            capped = observation if len(observation) <= 1800 else observation[:1800] + "\n...(truncated)"
             transcript.append(
-                f"\nSTEP: called {tool}({json.dumps(args)})\nOBSERVATION:\n{observation}"
+                f"\nSTEP: called {tool}({json.dumps(args)})\nOBSERVATION:\n{capped}"
             )
         if answer is None:
             gathered = [c for s in steps for c in s.citations]

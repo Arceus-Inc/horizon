@@ -16,11 +16,11 @@ from horizon.chat._chat import CeoChat, ChatStep
 from horizon.chat._memory import CeoMemory
 
 _GOVERNANCE_TASK = (
-    "Run a GOVERNANCE AUDIT of the entire company. Inspect the direction (every decision and goal) and "
-    "the open proposals. Identify every problem: goals that are blocked or drifting, goals that look "
-    "stale or dead, duplicated or runaway work, and proposals waiting on a decision. For EACH problem, "
-    "prepare a concrete corrective action with the gated write tools — archive a dead goal, re-prioritise "
-    "a mis-ranked one, approve a strong proposal, or reject a weak one. Then ANSWER with a concise "
+    "Run a governance review of the whole company. Inspect the direction (every decision and goal) and "
+    "the open proposals. Identify the issues: goals that are blocked or drifting, goals that look stalled "
+    "or no longer worth pursuing, redundant work, and proposals awaiting a decision. For EACH issue, "
+    "prepare a corrective action with the gated write tools - archive a stalled goal, re-prioritise a "
+    "mis-ranked one, approve a well-evidenced proposal, or reject a weak one. Then ANSWER with a concise "
     "executive memo: what you found and what you have prepared for confirmation."
 )
 

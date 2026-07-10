@@ -75,6 +75,19 @@ def test_permits_approve_only_above_confidence_and_evidence(tmp_path):
     assert not permits(policy, act(thin.id), horizon)  # too little evidence
 
 
+def test_permits_auto_reject_only_below_the_bar(tmp_path):
+    horizon = _horizon(tmp_path)
+    strong = horizon.reconcile([_brief("Strong bet", conf=0.85, refs=3)])[0]
+    weak = horizon.reconcile([_brief("Weak bet", conf=0.5, refs=1)])[0]
+    policy = AutonomyPolicy(auto_kinds=frozenset({"reject_proposal"}), min_proposal_confidence=0.8, min_evidence=3)
+
+    def act(pid):
+        return PendingAction(id="a", kind="reject_proposal", args={"proposal_id": pid}, preview="")
+
+    assert permits(policy, act(weak.id), horizon)  # below the bar -> safe to auto-reject
+    assert not permits(policy, act(strong.id), horizon)  # strong -> a human should decide
+
+
 # --- the beat under autonomy -------------------------------------------------
 
 

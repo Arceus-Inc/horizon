@@ -47,6 +47,8 @@ class ProposalLine:
     proposal_id: str
     statement: str
     status: str
+    confidence: float | None = None
+    evidence: int = 0
 
 
 @dataclass(frozen=True)
@@ -70,8 +72,12 @@ class CompanyContext:
             if not d.goals:
                 lines.append("  goals: (none)")
             for g in d.goals:
-                task = g.task_id or "—"
-                mt = f" · metric: {g.metric} -> {g.target}" if g.metric else ""
+                task = g.task_id or "-"
+                mt = ""
+                if g.metric:
+                    metric = g.metric if len(g.metric) <= 80 else g.metric[:80] + "..."
+                    target = (g.target or "")[:80]
+                    mt = f" - metric: {metric} -> {target}"
                 lines.append(
                     f"  - GOAL [{g.goal_id}] {g.title} "
                     f"(score {g.score:.2f}, priority {g.priority}, health {g.health}, "
@@ -80,7 +86,10 @@ class CompanyContext:
         if self.proposals:
             lines.append("\nOPEN PROPOSALS (awaiting approval):")
             for p in self.proposals:
-                lines.append(f"  - PROPOSAL [{p.proposal_id}] ({p.status}): {p.statement}")
+                meta = ""
+                if p.confidence is not None:
+                    meta = f", confidence {p.confidence:.2f}, {p.evidence} evidence source(s)"
+                lines.append(f"  - PROPOSAL [{p.proposal_id}] ({p.status}{meta}): {p.statement}")
         return "\n".join(lines)
 
 
@@ -117,7 +126,13 @@ class ContextAssembler:
                 )
             )
         proposals = [
-            ProposalLine(proposal_id=p.id, statement=p.decision_statement, status=p.status)
+            ProposalLine(
+                proposal_id=p.id,
+                statement=p.decision_statement,
+                status=p.status,
+                confidence=p.brief.confidence if p.brief is not None else None,
+                evidence=len(p.brief.evidence_refs) if p.brief is not None else 0,
+            )
             for p in self._horizon.list_proposals(status="proposed")
         ]
         return CompanyContext(

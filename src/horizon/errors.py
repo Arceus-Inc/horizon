@@ -33,3 +33,7 @@ class EgressBlocked(HorizonError):
 
 class GenerationError(HorizonError):
     """Raised when a scout/analyst LLM reply cannot be parsed into the expected structured output."""
+
+
+class ChatError(HorizonError):
+    """Raised when the CEO chat cannot parse a reasoning step into the expected structured output."""

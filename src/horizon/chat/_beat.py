@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from horizon.chat._actions import PendingAction
+from horizon.chat._actions import AutonomyPolicy, PendingAction, permits
 from horizon.chat._chat import CeoChat, ChatStep
 from horizon.chat._memory import CeoMemory
 
@@ -40,14 +40,24 @@ class BeatResult:
     citations: list[str] = field(default_factory=list)
     prepared_actions: list[PendingAction] = field(default_factory=list)
     steps: list[ChatStep] = field(default_factory=list)
+    auto_applied: list[str] = field(default_factory=list)  # action ids applied under standing autonomy
 
 
 class CeoBeat:
     """Run the CEO as an unattended executive employee over a high-level task."""
 
-    def __init__(self, *, chat: CeoChat, memory: CeoMemory | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        chat: CeoChat,
+        memory: CeoMemory | None = None,
+        autonomy: AutonomyPolicy | None = None,
+        by: str = "ceo",
+    ) -> None:
         self._chat = chat
         self._memory = memory
+        self._autonomy = autonomy
+        self._by = by
 
     def governance_audit(self) -> BeatResult:
         """Audit the whole company and prepare corrective actions (gated)."""
@@ -60,19 +70,35 @@ class CeoBeat:
     def run(self, task: str, *, label: str = "executive-beat") -> BeatResult:
         """Run one executive task; returns the memo + prepared actions, and logs it to memory."""
         answer = self._chat.ask(task)
+        auto_applied = self._apply_autonomous(answer.pending_actions)
         result = BeatResult(
             label=label,
             findings=answer.text,
             citations=answer.citations,
             prepared_actions=answer.pending_actions,
             steps=answer.steps,
+            auto_applied=auto_applied,
         )
         if self._memory is not None:
-            n = len(result.prepared_actions)
+            pending = len(result.prepared_actions) - len(auto_applied)
             self._memory.write(
                 "decision-log",
-                f"CEO {label}: {answer.text} (prepared {n} corrective action(s))",
+                f"CEO {label}: {answer.text} "
+                f"(auto-applied {len(auto_applied)}, {pending} awaiting confirm)",
                 importance=0.7,
                 tags=[label],
             )
         return result
+
+    def _apply_autonomous(self, actions: list[PendingAction]) -> list[str]:
+        """Apply the actions a standing directive pre-approves (report-after); returns their ids."""
+        if self._autonomy is None:
+            return []
+        applied: list[str] = []
+        for action in actions:
+            if len(applied) >= self._autonomy.max_auto:
+                break
+            if action.status == "pending" and permits(self._autonomy, action, self._chat.horizon):
+                self._chat.confirm(action, by=self._by)
+                applied.append(action.id)
+        return applied

@@ -98,3 +98,34 @@ class ActionExecutor:
     def _log(self, layer: str, text: str, importance: float) -> None:
         if self._memory is not None:
             self._memory.write(layer, text, importance=importance)
+
+
+@dataclass(frozen=True)
+class AutonomyPolicy:
+    """Pre-approved rules that let the CEO apply certain actions without per-action human confirm.
+
+    Bounded autonomy: only the listed ``auto_kinds`` may auto-apply, at most ``max_auto`` per run, and a
+    proposal is auto-approved only when its brief clears the confidence + evidence bar. Everything else
+    stays pending for a human. You set the leash; the CEO stays inside it.
+    """
+
+    auto_kinds: frozenset[str] = frozenset()
+    max_auto: int = 3
+    min_proposal_confidence: float = 0.8
+    min_evidence: int = 3
+
+
+def permits(policy: AutonomyPolicy, action: PendingAction, horizon: Horizon) -> bool:
+    """Whether a standing directive lets this action auto-apply (report-after) instead of waiting."""
+    if action.kind not in policy.auto_kinds:
+        return False
+    if action.kind == "approve_proposal":
+        pid = str(action.args.get("proposal_id", ""))
+        for p in horizon.list_proposals(status="proposed"):
+            if p.id == pid and p.brief is not None:
+                return (
+                    p.brief.confidence >= policy.min_proposal_confidence
+                    and len(p.brief.evidence_refs) >= policy.min_evidence
+                )
+        return False
+    return True

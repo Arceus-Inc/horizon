@@ -155,6 +155,11 @@ class CeoChat:
         if self._executor is not None:
             self._executor.discard(action)
 
+    @property
+    def horizon(self) -> Horizon:
+        """The live horizon this chat reads/writes — used by the beat's autonomy check."""
+        return self._horizon
+
     def ask(self, question: str, *, history: Sequence[Turn] = ()) -> Answer:
         """Answer one question, grounding it in live company state via tool calls."""
         context = ContextAssembler(self._horizon).assemble()

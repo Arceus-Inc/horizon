@@ -16,7 +16,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from horizon._ids import mint_id
-from horizon.errors import HorizonError, UnknownDecision
+from horizon.errors import HorizonError, UnknownDecision, UnknownGoal
 from horizon.feedback._health import HealthPolicy, staleness_health
 from horizon.feedback._listener import Observer, OutcomeListener
 from horizon.generation import (
@@ -39,7 +39,7 @@ from horizon.model._state import DecisionState
 from horizon.planning._authoring import author_goals
 from horizon.planning._decomposer import Decomposer
 from horizon.planning._reasoner import Reasoner
-from horizon.ports import GoalStore, IntakePort, OutcomeEvent, OutcomeFeed
+from horizon.ports import GoalNode, GoalStore, IntakePort, OutcomeEvent, OutcomeFeed
 from horizon.store import DecisionStore, StrategyStore
 
 
@@ -223,6 +223,49 @@ class Horizon:
         if record is None or record.task_id is None:
             return None
         return self._prioritiser.apply(record.task_id, record.score)
+
+    def set_priority(self, goal_id: str, priority: str) -> str:
+        """Set a goal's priority directly (a human/CEO override): move its score to that band + apply.
+
+        Maps the coarse priority to a representative score (``high`` -> the high threshold, ``medium`` ->
+        the medium threshold, ``low`` -> 0), writes it, and pushes it to the realizing task. Returns the
+        priority set. A real strategy write — the CEO's directive lever over ranking.
+        """
+        record = self._strategy.get(goal_id)
+        if record is None:
+            raise UnknownGoal(goal_id)
+        bands = {
+            "high": self._score_policy.high,
+            "medium": self._score_policy.medium,
+            "low": 0.0,
+        }
+        if priority not in bands:
+            raise HorizonError(f"unknown priority {priority!r}; expected high|medium|low")
+        record.score = bands[priority]
+        self._strategy.put(record)
+        if record.task_id is not None:
+            self._prioritiser.apply(record.task_id, record.score)
+        return priority
+
+    def archive_goal(self, goal_id: str) -> None:
+        """Retire a goal from the active direction (a CEO override) — it stops being steered."""
+        node = self._goals.get(goal_id)
+        if node is not None:
+            self._goals.upsert(
+                GoalNode(
+                    id=node.id,
+                    title=node.title,
+                    level=node.level,
+                    status="archived",
+                    parent_id=node.parent_id,
+                    owner=node.owner,
+                )
+            )
+        record = self._strategy.get(goal_id)
+        if record is not None:
+            record.needs_recovery = False
+            record.done = False
+            self._strategy.put(record)
 
     def sweep_staleness(self, *, now: datetime | None = None) -> list[str]:
         """Decay trust in goals verified long ago: drift stale ``on_track`` goals + resurface them.

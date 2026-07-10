@@ -12,8 +12,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from horizon._ids import mint_id
+from horizon.chat._actions import PendingAction
 from horizon.chat._context import ContextAssembler
 from horizon.facade import Horizon
+from horizon.intake import ScorePolicy
 
 
 @dataclass(frozen=True)
@@ -151,3 +154,112 @@ def make_memory_tools(memory: Any) -> dict[str, ToolSpec]:
             run=_recall,
         )
     }
+
+
+# ---------------------------------------------------------------- write (gated) tools
+
+
+@dataclass(frozen=True)
+class WriteSpec:
+    """A gated write tool: it PREPARES a :class:`PendingAction` (preview only) — never applies it."""
+
+    name: str
+    description: str
+    args: dict[str, str]
+    prepare: Callable[[Horizon, dict[str, Any]], PendingAction]
+
+
+def _prep_approve(horizon: Horizon, args: dict[str, Any]) -> PendingAction:
+    pid = str(args.get("proposal_id", "")).strip()
+    try:
+        detail = horizon.explain_proposal(pid)
+    except Exception:
+        detail = f"(could not preview {pid})"
+    return PendingAction(
+        id=mint_id("act"), kind="approve_proposal", args={"proposal_id": pid},
+        preview=f"APPROVE proposal {pid} -> seed a live decision + its goals:\n{detail}", evidence=[pid],
+    )
+
+
+def _prep_reject(horizon: Horizon, args: dict[str, Any]) -> PendingAction:
+    pid = str(args.get("proposal_id", "")).strip()
+    reason = str(args.get("reason", "")).strip()
+    return PendingAction(
+        id=mint_id("act"), kind="reject_proposal", args={"proposal_id": pid, "reason": reason},
+        preview=f"REJECT proposal {pid}" + (f" (reason: {reason})" if reason else ""), evidence=[pid],
+    )
+
+
+def _prep_set_priority(horizon: Horizon, args: dict[str, Any]) -> PendingAction:
+    gid = str(args.get("goal_id", "")).strip()
+    priority = str(args.get("priority", "")).strip()
+    goal = horizon.goal_view(gid)
+    current = ScorePolicy().priority_for(goal.score) if goal is not None else "?"
+    title = goal.title if goal is not None else gid
+    return PendingAction(
+        id=mint_id("act"), kind="set_priority", args={"goal_id": gid, "priority": priority},
+        preview=f"SET PRIORITY of goal '{title}' [{gid}]: {current} -> {priority}", evidence=[gid],
+    )
+
+
+def _prep_archive(horizon: Horizon, args: dict[str, Any]) -> PendingAction:
+    gid = str(args.get("goal_id", "")).strip()
+    goal = horizon.goal_view(gid)
+    title = goal.title if goal is not None else gid
+    return PendingAction(
+        id=mint_id("act"), kind="archive_goal", args={"goal_id": gid},
+        preview=f"ARCHIVE goal '{title}' [{gid}] — it stops being steered", evidence=[gid],
+    )
+
+
+def _prep_directive(horizon: Horizon, args: dict[str, Any]) -> PendingAction:
+    text = str(args.get("text", "")).strip()
+    return PendingAction(
+        id=mint_id("act"), kind="record_directive", args={"text": text},
+        preview=f"RECORD standing directive: {text!r}", evidence=[],
+    )
+
+
+def _prep_draft_decision(horizon: Horizon, args: dict[str, Any]) -> PendingAction:
+    statement = str(args.get("statement", "")).strip()
+    rationale = str(args.get("rationale", "")).strip()
+    return PendingAction(
+        id=mint_id("act"), kind="draft_decision",
+        args={"statement": statement, "rationale": rationale},
+        preview=f"SEED a new live decision: {statement!r}"
+        + (f"\n  rationale: {rationale}" if rationale else ""),
+        evidence=[],
+    )
+
+
+WRITE_TOOLS: dict[str, WriteSpec] = {
+    "approve_proposal": WriteSpec(
+        "approve_proposal", "Approve a funnel proposal -> seeds a live decision + its goals (GATED).",
+        {"proposal_id": "the proposal id to approve"}, _prep_approve),
+    "reject_proposal": WriteSpec(
+        "reject_proposal", "Reject a funnel proposal, with a reason (GATED).",
+        {"proposal_id": "the proposal id", "reason": "why (optional)"}, _prep_reject),
+    "set_priority": WriteSpec(
+        "set_priority", "Override a goal's priority to high|medium|low (GATED).",
+        {"goal_id": "the goal id", "priority": "high|medium|low"}, _prep_set_priority),
+    "archive_goal": WriteSpec(
+        "archive_goal", "Retire a goal from the active direction (GATED).",
+        {"goal_id": "the goal id to archive"}, _prep_archive),
+    "record_directive": WriteSpec(
+        "record_directive", "Record a standing directive/preference into memory (GATED).",
+        {"text": "the directive to remember"}, _prep_directive),
+    "draft_decision": WriteSpec(
+        "draft_decision", "Draft and seed a new strategic decision (GATED).",
+        {"statement": "the decision statement", "rationale": "why (optional)"}, _prep_draft_decision),
+}
+
+
+def render_write_specs(tools: dict[str, WriteSpec]) -> str:
+    """Reflect the gated write tools into the prompt (flagged as confirm-to-apply)."""
+    lines: list[str] = []
+    for spec in tools.values():
+        argsig = ", ".join(spec.args) or "(no args)"
+        lines.append(f"- {spec.name}({argsig}): {spec.description}")
+        for arg, desc in spec.args.items():
+            lines.append(f"    · {arg}: {desc}")
+    return "\n".join(lines)

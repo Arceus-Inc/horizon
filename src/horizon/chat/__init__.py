@@ -8,6 +8,7 @@ Memory, gated write tools, and the CEO-as-employee beat land in later slices.
 
 from __future__ import annotations
 
+from horizon.chat._actions import ActionExecutor, PendingAction
 from horizon.chat._chat import Answer, CeoChat, ChatStep, Turn
 from horizon.chat._context import (
     CompanyContext,
@@ -19,15 +20,20 @@ from horizon.chat._context import (
 from horizon.chat._memory import LAYERS, CeoMemory, MemoryEntry, render_memories
 from horizon.chat._tools import (
     READ_TOOLS,
+    WRITE_TOOLS,
     ToolResult,
     ToolSpec,
+    WriteSpec,
     make_memory_tools,
     render_tool_specs,
+    render_write_specs,
 )
 
 __all__ = [
     "LAYERS",
     "READ_TOOLS",
+    "WRITE_TOOLS",
+    "ActionExecutor",
     "Answer",
     "CeoChat",
     "CeoMemory",
@@ -37,11 +43,14 @@ __all__ = [
     "DecisionLine",
     "GoalLine",
     "MemoryEntry",
+    "PendingAction",
     "ProposalLine",
     "ToolResult",
     "ToolSpec",
     "Turn",
+    "WriteSpec",
     "make_memory_tools",
     "render_memories",
     "render_tool_specs",
+    "render_write_specs",
 ]

@@ -47,7 +47,7 @@ from strong_run import (
 from horizon import Horizon, LoopReporter
 from horizon.chat import AutonomyPolicy, Ceo
 from horizon.feedback import HealthPolicy
-from horizon.generation import CandidateGoal, DirectionBrief
+from horizon.generation import CandidateGoal, DirectionBrief, ProposalStore
 from horizon.intake import ScorePolicy
 from horizon.model import Decision
 from horizon.store import DecisionStore, StrategyStore
@@ -147,7 +147,8 @@ async def run() -> dict[str, Any]:
     horizon = Horizon(
         goals=ChorusGoalStore(chorus), intake=ChorusIntakePort(chorus), outcomes=ChorusOutcomeFeed(chorus),
         reasoner=reasoner, decisions=DecisionStore(workdir / "decisions.json"),
-        strategy=StrategyStore(workdir / "strategy.json"), default_assignee=_EMPLOYEE,
+        strategy=StrategyStore(workdir / "strategy.json"),
+        proposals=ProposalStore(workdir / "proposals.json"), default_assignee=_EMPLOYEE,
         model=deployment, score_policy=score_policy, health_policy=health_policy,
         decompose_context=_CONTEXT, outcome_observer=reporter.observe,
     )

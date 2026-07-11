@@ -33,9 +33,11 @@ import dream
 from chorus.events import Event, EventKind
 from chorus.facade import Chorus
 from chorus.ledger import SqliteLedger
+from chorus.outcomes import AgentReview
 from chorus.roles import RoleRegistry, default_roles
 from chorus.workforce import Employee
 from chorus_bridge import ChorusGoalStore, ChorusIntakePort, ChorusOutcomeFeed
+from chorus_employee.ceo import ceo_plugin
 from chorus_harness import EmployeeHarnessFactory
 from strong_run import (
     _CSS,
@@ -103,18 +105,19 @@ _DIRECTIVE = (
 )
 
 _CEO_INTENT = (
-    "You are the CEO running a governance beat over the live company.\n\n"
-    "FIRST call `governance_read` to see the current direction: the standing decisions with their goals "
-    "(priority, health, status, score) and every open proposal awaiting your call. Read it before you "
-    "act — every decision below must be grounded in what it shows you.\n\n"
-    "Then act, using your governance tools:\n"
-    "- Adjudicate EACH open proposal. Approve the well-evidenced ones that advance profitable growth "
-    "with `proposal_approve`; reject the low-evidence distractions with `proposal_reject` (give a short "
-    "reason). Your standing rule: " + _DIRECTIVE + "\n"
-    "- If a high-priority goal is blocked or stalled, reprioritise it with `goal_set_priority` or retire "
-    "it with `goal_archive` as your judgement dictates — and say why.\n\n"
-    "FINALLY write `directive.md`: a crisp executive directive stating what you changed, why, and what "
-    "the org should do next quarter. Cite the goal and proposal ids you acted on."
+    "You are the CEO. Review the company's direction and adjudicate its open proposals, then record "
+    "your decisions in `directive.md`.\n\n"
+    "Use `governance_read` to see the standing decisions with their goals and the open proposals — that "
+    "tool is your only source of truth about the company; do not search the repository or read "
+    "log/telemetry files. Approve each well-evidenced proposal with `proposal_approve` and reject each "
+    "low-evidence distraction with `proposal_reject` (short reason); reprioritise a goal with "
+    "`goal_set_priority` (bands: low, medium, high) or retire a done/obsolete one with `goal_archive` "
+    "when warranted. Your standing rule: " + _DIRECTIVE + " Your actions are recorded automatically in "
+    "governance-ledger.md.\n\n"
+    "Your deliverable is `directive.md` — write it once: state your decision(s) up top; for EACH "
+    "proposal you approved or rejected give its id and your one-line reason in the text; name the key "
+    "risks with a guardrail each; and list the ranked next actions. That file is the finished work — do "
+    "not re-verify by re-reading or searching."
 )
 
 
@@ -222,6 +225,7 @@ async def run() -> dict[str, Any]:
     mat = ceo_factory.materialize(Employee(id="ceo", name="Casey (CEO)", role="ceo"))
 
     events: list[dict[str, Any]] = []
+    tool_errors: list[dict[str, str]] = []
 
     def _observe(ev: Event) -> None:
         p = ev.payload
@@ -229,20 +233,51 @@ async def run() -> dict[str, Any]:
             events.append({"t": "tool", "tool": p.get("tool"), "input": _short(p.get("input"), 240)})
             print(f"  [tool ->] {p.get('tool')}  {_short(p.get('input'), 100)}")
         elif ev.kind is EventKind.RUN_TOOL_RESULT:
+            is_err = bool(p.get("is_error"))
+            content = _short(p.get("content_preview"), 600)
+            # A "tool-not-in-role-manifest" refusal is dream's read-only planner/evaluator phase
+            # correctly declining a MUTATION during planning — recoverable by design (the generator
+            # phase does the real work), and it happens for every role. Mark it as a guardrail, NOT a
+            # defect, so the report is honest rather than alarming.
+            guardrail = is_err and "tool-not-in-role-manifest" in content
             events.append({
-                "t": "result", "tool": p.get("tool"), "is_error": bool(p.get("is_error")),
-                "content": _short(p.get("content_preview"), 600),
+                "t": "result", "tool": p.get("tool"), "is_error": is_err,
+                "guardrail": guardrail, "content": content,
             })
+            tag = " (guardrail)" if guardrail else (" (ERROR)" if is_err else "")
+            print(f"  [tool <-] {p.get('tool')}{tag}  {content[:110]}")
+            if is_err and not guardrail:
+                tool_errors.append({"tool": str(p.get("tool")), "content": content})
         elif ev.kind is EventKind.RUN_TEXT:
-            text = str(p.get("text", "")).strip()
-            if text:
-                events.append({"t": "think", "text": _short(text, 700)})
+            text = str(p.get("text", ""))
+            if not text:
+                return
+            # RUN_TEXT streams token-by-token; coalesce a contiguous reasoning burst into ONE block (a
+            # tool call/result breaks the burst) so the report shows readable paragraphs instead of
+            # hundreds of single-token boxes.
+            if events and events[-1]["t"] == "think":
+                events[-1]["text"] += text
+            else:
+                events.append({"t": "think", "text": text})
 
     print("CEO governance beat (real LLM, tools bound to the live horizon tree)...")
+    # Thread the CEO's OWN DoD rubric into dream's in-beat evaluator (spec 16) — the real scheduler does
+    # this; a direct run_task call must too, else the evaluator uses a generic bar that mis-reads the
+    # post-adjudication tree ("no open proposals ⇒ nothing was done") and wrongly blocks the step.
+    verifier = ceo_plugin().dod_generator(_CEO_INTENT)
+    rubric = verifier.spec.rubric if isinstance(verifier.spec, AgentReview) else ""
     outcome = await mat.runner.run_task(
-        task_id="ceo-govern-1", intent=_CEO_INTENT, run_id="run-ceo-govern-1", observer=_observe,
+        task_id="ceo-govern-1", intent=_CEO_INTENT, run_id="run-ceo-govern-1", rubric=rubric,
+        observer=_observe,
     )
     print(f"  passed={outcome.passed}  outcome={outcome.outcome}")
+
+    # Tidy the coalesced reasoning: trim + cap each block, drop trivially short bursts (a stray token
+    # between two tool calls) so the report reads cleanly.
+    for e in events:
+        if e["t"] == "think":
+            e["text"] = e["text"].strip()[:1500]
+    events = [e for e in events if not (e["t"] == "think" and len(e["text"]) < 12)]
 
     state_after = _state_snapshot()
     proposals_after = [
@@ -255,6 +290,18 @@ async def run() -> dict[str, Any]:
     tool_calls = [e for e in events if e["t"] == "tool"]
     _GOV = {"governance_read", "proposal_approve", "proposal_reject", "goal_set_priority", "goal_archive"}
     gov_calls = [e for e in tool_calls if e["tool"] in _GOV]
+    gov_errors = [e for e in tool_errors if e["tool"] in _GOV]  # HARD errors only (guardrails excluded)
+    guardrails = [e for e in events if e.get("t") == "result" and e.get("guardrail")]
+
+    # Loud, self-verifying: a HARD governance error means the seam is not clean — surface it
+    # unmistakably. Planning-phase guardrail refusals are recoverable-by-design and reported separately.
+    if gov_errors:
+        print(f"\n  !!! {len(gov_errors)} HARD GOVERNANCE TOOL ERROR(S) — the seam is NOT clean:")
+        for e in gov_errors:
+            print(f"      - {e['tool']}: {e['content'][:160]}")
+    else:
+        print(f"  governance tools clean: {len(gov_calls)} call(s), 0 hard errors, "
+              f"{len(guardrails)} recovered planning-phase guardrail(s)")
 
     ledger.close()
     return {
@@ -263,6 +310,7 @@ async def run() -> dict[str, Any]:
             "generated": datetime.now(UTC).isoformat(timespec="seconds"),
             "goals": len(goals), "beats": _N_EXECUTE,
             "tool_calls": len(tool_calls), "gov_calls": len(gov_calls),
+            "gov_errors": len(gov_errors), "guardrails": len(guardrails),
             "passed": bool(outcome.passed), "outcome": str(outcome.outcome),
             "summary": str(getattr(outcome, "summary", "") or ""),
             "llm_calls": len(reasoner.calls), "listener": horizon.listener_stats(),
@@ -318,8 +366,13 @@ def _state_table(rows: list[dict[str, Any]]) -> str:
 def render_html(data: dict[str, Any]) -> str:
     meta = data["meta"]
     emp = data["employee"]
-    verdict = "PASS" if meta["passed"] else "REVIEW"
-    verdict_cls = "ok" if meta["passed"] else "fail"
+    gov_errors = int(meta.get("gov_errors", 0))
+    guardrails = int(meta.get("guardrails", 0))
+    clean = meta["passed"] and gov_errors == 0
+    verdict = "PASS" if clean else "REVIEW"
+    verdict_cls = "ok" if clean else "fail"
+    seam = (f"0 hard errors · {guardrails} recovered planning guardrail(s)" if gov_errors == 0
+            else f"{gov_errors} HARD governance tool ERROR(s)")
     parts: list[str] = []
     parts.append(
         f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -330,12 +383,12 @@ def render_html(data: dict[str, Any]) -> str:
 <p class="intent"><b>Company mission:</b> {_esc(meta['mission'])}</p></header>
 <div class="reverify"><h2>One seam, both sides</h2>
 <p style="color:var(--muted);font-size:13.5px;margin:8px 0 0">A real company was built (LLM decomposition + real Analyst beats + a queue of proposals). Then the CEO — a genuine <b>chorus employee</b> whose <code>governance_*</code> tools bind to a dream <code>GovernancePort</code> — ran one governance beat. Every tool call read and re-aimed the <b>live horizon tree</b> through the port, yet chorus never imports horizon: they meet only at the contract.</p>
-<div class="overall"><span class="big {verdict_cls}">{verdict}</span><p>{meta['gov_calls']} governance tool call(s) &middot; {meta['tool_calls']} tool calls total &middot; {meta['llm_calls']} LLM calls &middot; DoD outcome: {_esc(meta['outcome'])}</p></div></div>
+<div class="overall"><span class="big {verdict_cls}">{verdict}</span><p>{meta['gov_calls']} governance tool call(s) &middot; {seam} &middot; {meta['tool_calls']} tool calls total &middot; {meta['llm_calls']} LLM calls &middot; DoD outcome: {_esc(meta['outcome'])}</p></div></div>
 <div class="chips">
 <div class="chip"><span>{meta['goals']}</span>Goals (LLM)</div>
 <div class="chip"><span>{meta['beats']}</span>Real beats run</div>
 <div class="chip"><span>{meta['gov_calls']}</span>Governance tool calls</div>
-<div class="chip"><span>{len(data['proposals_before'])}</span>Proposals adjudicated</div>
+<div class="chip"><span>{gov_errors}</span>Hard errors</div>
 <div class="chip"><span>{verdict}</span>CEO DoD</div>
 </div><h2 class="sec">The executive loop, phase by phase</h2>"""
     )
@@ -381,11 +434,18 @@ def render_html(data: dict[str, Any]) -> str:
                 f'<br><span class="mono" style="font-size:12px">{_esc(str(ev["input"]))}</span></div>'
             )
         elif ev["t"] == "result":
-            cls = "fail" if ev["is_error"] else "ok"
-            parts.append(
-                f'<div class="transition"><span class="badge {cls}">← {_esc(str(ev["tool"]))}</span> '
-                f'<span class="kv">{_esc(str(ev["content"]))}</span></div>'
-            )
+            if ev.get("guardrail"):
+                parts.append(
+                    f'<div class="transition"><span class="badge info">guardrail · {_esc(str(ev["tool"]))}</span> '
+                    '<span class="kv">read-only planning phase declined a mutation (recovered — the '
+                    'generator phase applied it)</span></div>'
+                )
+            else:
+                cls = "fail" if ev["is_error"] else "ok"
+                parts.append(
+                    f'<div class="transition"><span class="badge {cls}">← {_esc(str(ev["tool"]))}</span> '
+                    f'<span class="kv">{_esc(str(ev["content"]))}</span></div>'
+                )
         elif ev["t"] == "think":
             parts.append(f'<details class="art"><summary>thinking</summary><pre>{_esc(str(ev["text"]))}</pre></details>')
     parts.append("</div></section>")

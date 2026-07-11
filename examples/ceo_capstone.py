@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 import dream
+from chorus.events import Event, EventKind
 from chorus.facade import Chorus
 from chorus.ledger import SqliteLedger
 from chorus.roles import RoleRegistry, default_roles
@@ -45,9 +46,9 @@ from strong_run import (
 )
 
 from horizon import Horizon, LoopReporter
-from horizon.chat import AutonomyPolicy, Ceo
 from horizon.feedback import HealthPolicy
 from horizon.generation import CandidateGoal, DirectionBrief, ProposalStore
+from horizon.governance import HorizonGovernance
 from horizon.intake import ScorePolicy
 from horizon.model import Decision
 from horizon.store import DecisionStore, StrategyStore
@@ -96,14 +97,31 @@ _WEAK_BRIEF = DirectionBrief(
     evidence_refs=["ev_opinion"],
 )
 
-_ORG_FACTS = [
-    "We sell an AI-assisted analytics product to mid-market teams; our edge is defensible, reproducible analysis.",
-    "This quarter's single strategic priority is profitable growth, not top-line vanity.",
-]
 _DIRECTIVE = (
     "Approve well-evidenced proposals (three or more independent sources) that advance profitable "
     "growth, and reject distractions and low-evidence bets - protect the quarter's single priority."
 )
+
+_CEO_INTENT = (
+    "You are the CEO running a governance beat over the live company.\n\n"
+    "FIRST call `governance_read` to see the current direction: the standing decisions with their goals "
+    "(priority, health, status, score) and every open proposal awaiting your call. Read it before you "
+    "act — every decision below must be grounded in what it shows you.\n\n"
+    "Then act, using your governance tools:\n"
+    "- Adjudicate EACH open proposal. Approve the well-evidenced ones that advance profitable growth "
+    "with `proposal_approve`; reject the low-evidence distractions with `proposal_reject` (give a short "
+    "reason). Your standing rule: " + _DIRECTIVE + "\n"
+    "- If a high-priority goal is blocked or stalled, reprioritise it with `goal_set_priority` or retire "
+    "it with `goal_archive` as your judgement dictates — and say why.\n\n"
+    "FINALLY write `directive.md`: a crisp executive directive stating what you changed, why, and what "
+    "the org should do next quarter. Cite the goal and proposal ids you acted on."
+)
+
+
+def _short(value: object, n: int = 220) -> str:
+    """One-line, length-capped render of a tool input/observation for the event log + report."""
+    s = str(value).replace("\n", " / ")
+    return s if len(s) <= n else s[:n] + "..."
 
 
 async def run() -> dict[str, Any]:
@@ -129,7 +147,7 @@ async def run() -> dict[str, Any]:
     ledger.employees.create(Employee(id=_EMPLOYEE, name="Vera", role="analyst"))
     # register the CEO as a real member of the org roster (executive beats run via horizon)
     with contextlib.suppress(Exception):
-        ledger.employees.create(Employee(id="ceo", name="Casey (CEO)", role="analyst"))
+        ledger.employees.create(Employee(id="ceo", name="Casey (CEO)", role="ceo"))
 
     chorus = Chorus.build(
         ledger=ledger, org_repo=str(workdir / "org"), memory_repo=str(workdir / "memory"),
@@ -190,85 +208,79 @@ async def run() -> dict[str, Any]:
         for p in horizon.list_proposals(status="proposed")
     ]
 
-    # ---- the CEO: memory + bounded autonomy ----
-    autonomy = AutonomyPolicy(
-        auto_kinds=frozenset({"approve_proposal", "reject_proposal"}), max_auto=3,
-        min_proposal_confidence=0.8, min_evidence=3,
+    # ---- the CEO as a chorus employee: governance tools bound to horizon via the GovernancePort ----
+    # This is the seam the refactor built. The CEO is a real chorus employee whose ``governance_*`` tools
+    # bind to an abstract dream ``GovernancePort``. Here the composition root wires that port to THIS
+    # horizon (``HorizonGovernance``). When the employee calls ``governance_read`` / ``proposal_approve``
+    # / ``proposal_reject`` mid-beat, it reads and re-aims the LIVE tree built above — yet chorus never
+    # imports horizon and horizon never imports chorus; they meet only at the Port.
+    gov = HorizonGovernance(horizon, score_policy=score_policy)
+    ceo_factory = EmployeeHarnessFactory(
+        api_key=key, base_url=base, deployment=deployment, company_id=f"{company_id}-ceo",
+        roles=registry, ledger=ledger, governance=gov, timeout_s=600.0,
     )
-    ceo = Ceo(
-        horizon=horizon, reasoner=reasoner, memory_path=workdir / "ceo_memory.json",
-        model=deployment, autonomy=autonomy, name="ceo", max_steps=10,
+    mat = ceo_factory.materialize(Employee(id="ceo", name="Casey (CEO)", role="ceo"))
+
+    events: list[dict[str, Any]] = []
+
+    def _observe(ev: Event) -> None:
+        p = ev.payload
+        if ev.kind is EventKind.RUN_TOOL_USE:
+            events.append({"t": "tool", "tool": p.get("tool"), "input": _short(p.get("input"), 240)})
+            print(f"  [tool ->] {p.get('tool')}  {_short(p.get('input'), 100)}")
+        elif ev.kind is EventKind.RUN_TOOL_RESULT:
+            events.append({
+                "t": "result", "tool": p.get("tool"), "is_error": bool(p.get("is_error")),
+                "content": _short(p.get("content_preview"), 600),
+            })
+        elif ev.kind is EventKind.RUN_TEXT:
+            text = str(p.get("text", "")).strip()
+            if text:
+                events.append({"t": "think", "text": _short(text, 700)})
+
+    print("CEO governance beat (real LLM, tools bound to the live horizon tree)...")
+    outcome = await mat.runner.run_task(
+        task_id="ceo-govern-1", intent=_CEO_INTENT, run_id="run-ceo-govern-1", observer=_observe,
     )
-    for fact in _ORG_FACTS:
-        ceo.remember("org-facts", fact, importance=0.7)
-    ceo.remember("directives", _DIRECTIVE, importance=0.95)
-
-    # ---- CEO governance BEAT (live) ----
-    print("CEO governance audit (real LLM)...")
-    beat = ceo.govern()
-    print(f"  prepared {len(beat.prepared_actions)} action(s); auto-applied {len(beat.auto_applied)}")
-
-    # ---- human confirms the still-pending corrections -> the org re-aims ----
-    confirmations: list[dict[str, Any]] = []
-    for action in beat.prepared_actions:
-        if action.status == "applied":
-            confirmations.append({"kind": action.kind, "preview": action.preview,
-                                  "result": action.result, "how": "auto (standing directive)"})
-            continue
-        with contextlib.suppress(Exception):
-            result = ceo.confirm(action)
-            confirmations.append({"kind": action.kind, "preview": action.preview,
-                                  "result": result, "how": "human-confirmed"})
+    print(f"  passed={outcome.passed}  outcome={outcome.outcome}")
 
     state_after = _state_snapshot()
     proposals_after = [
         {"id": p.id, "statement": p.decision_statement, "status": p.status}
         for p in horizon.list_proposals(status=None)
     ]
+    directive_path = mat.working_dir / "directive.md"
+    directive_md = directive_path.read_text(encoding="utf-8") if directive_path.is_file() else ""
 
-    # ---- CHAT with the CEO ----
-    print("chatting with the CEO (real LLM)...")
-    chat_log: list[dict[str, Any]] = []
-    for q in (
-        "In one paragraph: what did you just change in the company, and why?",
-        "What is our standing rule before greenlighting a strategic bet?",
-    ):
-        ans = ceo.ask(q)
-        chat_log.append({
-            "q": q, "a": ans.text, "citations": ans.citations,
-            "tools": [s.tool for s in ans.steps],
-        })
-        print(f"  Q: {q[:48]}  -> {len(ans.steps)} tool step(s)")
-
-    memory_after = [
-        {"layer": e.layer, "text": e.text, "importance": e.importance}
-        for e in sorted(ceo.memory.all(), key=lambda e: e.created_at)
-    ]
+    tool_calls = [e for e in events if e["t"] == "tool"]
+    _GOV = {"governance_read", "proposal_approve", "proposal_reject", "goal_set_priority", "goal_archive"}
+    gov_calls = [e for e in tool_calls if e["tool"] in _GOV]
 
     ledger.close()
     return {
         "meta": {
-            "mission": _DECISION, "model": deployment, "generated": datetime.now(UTC).isoformat(timespec="seconds"),
+            "mission": _DECISION, "model": deployment,
+            "generated": datetime.now(UTC).isoformat(timespec="seconds"),
             "goals": len(goals), "beats": _N_EXECUTE,
-            "prepared": len(beat.prepared_actions), "auto_applied": len(beat.auto_applied),
-            "confirmed": sum(1 for c in confirmations if c["how"] == "human-confirmed"),
+            "tool_calls": len(tool_calls), "gov_calls": len(gov_calls),
+            "passed": bool(outcome.passed), "outcome": str(outcome.outcome),
+            "summary": str(getattr(outcome, "summary", "") or ""),
             "llm_calls": len(reasoner.calls), "listener": horizon.listener_stats(),
         },
-        "state_before": state_before, "proposals_before": proposals_before,
-        "org_facts": _ORG_FACTS, "directive": _DIRECTIVE,
-        "beat": {
-            "findings": beat.findings, "citations": beat.citations,
-            "steps": [{"tool": s.tool, "args": s.args, "observation": s.observation} for s in beat.steps],
-            "actions": [
-                {"kind": a.kind, "preview": a.preview, "status": a.status,
-                 "auto": a.id in beat.auto_applied}
-                for a in beat.prepared_actions
-            ],
+        "employee": {
+            "tools": list(mat.config.tools),
+            "sandbox": str(getattr(mat.config, "sandbox", "")),
+            "max_turns": getattr(mat.config, "max_turns", None),
+            "max_sprints": getattr(mat.config, "max_sprints", None),
+            "worktree": str(mat.working_dir),
         },
-        "confirmations": confirmations,
+        "directive_rule": _DIRECTIVE,
+        "state_before": state_before, "proposals_before": proposals_before,
+        "events": events,
         "state_after": state_after, "proposals_after": proposals_after,
-        "chat": chat_log, "memory_after": memory_after,
+        "directive_md": directive_md,
     }
+
 
 
 # --------------------------------------------------------------------------- HTML renderer
@@ -305,23 +317,26 @@ def _state_table(rows: list[dict[str, Any]]) -> str:
 
 def render_html(data: dict[str, Any]) -> str:
     meta = data["meta"]
+    emp = data["employee"]
+    verdict = "PASS" if meta["passed"] else "REVIEW"
+    verdict_cls = "ok" if meta["passed"] else "fail"
     parts: list[str] = []
     parts.append(
         f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Horizon — CEO Capstone</title><style>{_CSS}{_CHAT_CSS}</style></head><body><div class="wrap">
-<header class="top"><div class="eyebrow">Horizon · the CEO · executive loop</div>
-<h1>CEO Capstone — the executive governs the company, live</h1>
+<header class="top"><div class="eyebrow">Horizon · chorus · the CEO governs, live</div>
+<h1>CEO Capstone — a chorus employee re-aims the company through the GovernancePort</h1>
 <p class="intent"><b>Company mission:</b> {_esc(meta['mission'])}</p></header>
-<div class="reverify"><h2>The executive loop</h2>
-<p style="color:var(--muted);font-size:13.5px;margin:8px 0 0">A real company was built (LLM decomposition + real Analyst beats + a queue of proposals). Then the CEO ran a governance beat over it, auto-applied what a standing directive pre-approved, prepared the rest for confirmation, and answered questions about what it did — all grounded in live state and its own memory.</p>
-<div class="overall"><span class="big">CEO IN COMMAND</span><p>prepared {meta['prepared']} correction(s) &middot; auto-applied {meta['auto_applied']} under standing autonomy &middot; {meta['confirmed']} human-confirmed &middot; {meta['llm_calls']} LLM calls</p></div></div>
+<div class="reverify"><h2>One seam, both sides</h2>
+<p style="color:var(--muted);font-size:13.5px;margin:8px 0 0">A real company was built (LLM decomposition + real Analyst beats + a queue of proposals). Then the CEO — a genuine <b>chorus employee</b> whose <code>governance_*</code> tools bind to a dream <code>GovernancePort</code> — ran one governance beat. Every tool call read and re-aimed the <b>live horizon tree</b> through the port, yet chorus never imports horizon: they meet only at the contract.</p>
+<div class="overall"><span class="big {verdict_cls}">{verdict}</span><p>{meta['gov_calls']} governance tool call(s) &middot; {meta['tool_calls']} tool calls total &middot; {meta['llm_calls']} LLM calls &middot; DoD outcome: {_esc(meta['outcome'])}</p></div></div>
 <div class="chips">
 <div class="chip"><span>{meta['goals']}</span>Goals (LLM)</div>
 <div class="chip"><span>{meta['beats']}</span>Real beats run</div>
-<div class="chip"><span>{meta['prepared']}</span>Corrections prepared</div>
-<div class="chip"><span>{meta['auto_applied']}</span>Auto-applied</div>
-<div class="chip"><span>{meta['confirmed']}</span>Human-confirmed</div>
+<div class="chip"><span>{meta['gov_calls']}</span>Governance tool calls</div>
+<div class="chip"><span>{len(data['proposals_before'])}</span>Proposals adjudicated</div>
+<div class="chip"><span>{verdict}</span>CEO DoD</div>
 </div><h2 class="sec">The executive loop, phase by phase</h2>"""
     )
 
@@ -341,74 +356,68 @@ def render_html(data: dict[str, Any]) -> str:
             )
     parts.append("</div></section>")
 
-    # Phase 2 — CEO memory seeded
+    # Phase 2 — the CEO employee
+    skills = ", ".join(t for t in emp["tools"] if t in {
+        "governance_read", "proposal_approve", "proposal_reject", "goal_set_priority", "goal_archive"})
     parts.append(
-        """<section class="phase"><div class="phase-head"><span class="pnum">2</span><div>
-<h3>The CEO's memory</h3><p>What the executive carries in: durable org facts and a standing directive that shapes its judgement.</p></div></div><div class="phase-body">"""
+        f"""<section class="phase"><div class="phase-head"><span class="pnum">2</span><div>
+<h3>The CEO — a real chorus employee</h3><p>Its own manifest: executive toolset, isolated sandbox, its governance tools bound to the horizon control plane through the dream <code>GovernancePort</code>.</p></div></div><div class="phase-body">
+<div class="transition"><span class="kv"><b>governance tools:</b> {_esc(skills)}</span></div>
+<div class="transition"><span class="kv"><b>sandbox:</b> {_esc(emp['sandbox'])} · max_turns {emp['max_turns']} · max_sprints {emp['max_sprints']}</span></div>
+<div class="transition"><span class="kv mono">{_esc(emp['worktree'])}</span></div>
+<div class="transition"><span class="kv"><b>standing rule:</b> {_esc(data['directive_rule'])}</span></div>
+</div></section>"""
     )
-    for f in data["org_facts"]:
-        parts.append(f'<div class="transition"><span class="kv">[org-fact] {_esc(f)}</span></div>')
-    parts.append(f'<div class="transition"><span class="kv"><b>[directive]</b> {_esc(data["directive"])}</span></div>')
+
+    # Phase 3 — the governance beat (event timeline)
+    parts.append(
+        """<section class="phase"><div class="phase-head"><span class="pnum">3</span><div>
+<h3>Governance beat — the CEO reads and re-aims the live tree</h3><p>Every <code>governance_*</code> call below hit the real horizon control plane through the port. Reasoning is interleaved.</p></div></div><div class="phase-body">"""
+    )
+    for ev in data["events"]:
+        if ev["t"] == "tool":
+            parts.append(
+                f'<div class="act"><span class="k">→ {_esc(str(ev["tool"]))}</span>'
+                f'<br><span class="mono" style="font-size:12px">{_esc(str(ev["input"]))}</span></div>'
+            )
+        elif ev["t"] == "result":
+            cls = "fail" if ev["is_error"] else "ok"
+            parts.append(
+                f'<div class="transition"><span class="badge {cls}">← {_esc(str(ev["tool"]))}</span> '
+                f'<span class="kv">{_esc(str(ev["content"]))}</span></div>'
+            )
+        elif ev["t"] == "think":
+            parts.append(f'<details class="art"><summary>thinking</summary><pre>{_esc(str(ev["text"]))}</pre></details>')
     parts.append("</div></section>")
 
-    # Phase 3 — governance beat
-    beat = data["beat"]
-    parts.append(
-        f"""<section class="phase"><div class="phase-head"><span class="pnum">3</span><div>
-<h3>Governance beat — the CEO as an employee</h3><p>Unattended, the CEO inspected the whole company and prepared corrections. Its reasoning steps and the memo are below.</p></div></div><div class="phase-body">
-<div class="overall" style="background:#eef2ff;border-color:#c7d2fe"><p style="color:#3730a3">{_esc(beat['findings'])}</p></div>"""
-    )
-    for a in beat["actions"]:
-        tag = ('<span class="auto">✓ auto-applied (standing directive)</span>' if a["auto"]
-               else f'<span class="pend">◦ {_esc(a["status"])} — awaited confirmation</span>')
-        parts.append(f'<div class="act"><span class="k">{_esc(a["kind"])}</span> — {tag}<br>{_esc(a["preview"])}</div>')
-    steps_txt = "\n".join(
-        f"- {s['tool']}({json.dumps(s['args'])})\n  {s['observation'][:400]}" for s in beat["steps"]
-    )
-    parts.append(f'<details class="art"><summary>The CEO\'s reasoning steps ({len(beat["steps"])})</summary><pre>{_esc(steps_txt)}</pre></details>')
-    parts.append("</div></section>")
-
-    # Phase 4 — corrections applied
+    # Phase 4 — state after
     parts.append(
         """<section class="phase"><div class="phase-head"><span class="pnum">4</span><div>
-<h3>Corrections applied — the org re-aims</h3><p>Auto-approved under the standing directive, or confirmed by a human. Each is a real write.</p></div></div><div class="phase-body">"""
-    )
-    for c in data["confirmations"]:
-        parts.append(
-            f'<div class="decision-row"><div class="head"><b>{_esc(c["kind"])}</b>'
-            f'<span class="badge {"ok" if c["how"].startswith("auto") else "info"}">{_esc(c["how"])}</span></div>'
-            f'<div class="transition"><span class="kv">{_esc(c["result"])}</span></div></div>'
-        )
-    if not data["confirmations"]:
-        parts.append('<p class="why">(no corrections)</p>')
-    parts.append("</div></section>")
-
-    # Phase 5 — state after
-    parts.append(
-        """<section class="phase"><div class="phase-head"><span class="pnum">5</span><div>
-<h3>Company state — after the CEO</h3><p>The direction after the executive re-aimed it.</p></div></div><div class="phase-body">"""
+<h3>Company state — after the CEO</h3><p>The direction after the executive re-aimed it: approvals promoted to live decisions, distractions rejected.</p></div></div><div class="phase-body">"""
     )
     parts.append(_state_table(data["state_after"]))
+    if data["proposals_after"]:
+        parts.append('<div class="why" style="margin-top:10px">Proposals, after adjudication:</div>')
+        for p in data["proposals_after"]:
+            badge = ("ok" if p["status"] == "approved" else "fail" if p["status"] == "rejected" else "info")
+            parts.append(
+                f'<div class="decision-row"><div class="head"><b>{_esc(p["statement"])}</b>'
+                f'<span class="badge {badge}">{_esc(p["status"])}</span></div>'
+                f'<div class="transition"><span class="kv mono">{_esc(p["id"])}</span></div></div>'
+            )
     parts.append("</div></section>")
 
-    # Phase 6 — chat
+    # Phase 5 — the directive
     parts.append(
-        """<section class="phase"><div class="phase-head"><span class="pnum">6</span><div>
-<h3>Talking to the CEO</h3><p>Grounded, cited answers — drawing on live state and its own memory of what it just did.</p></div></div><div class="phase-body"><div class="bubbles">"""
+        f"""<section class="phase"><div class="phase-head"><span class="pnum">5</span><div>
+<h3>The directive — the CEO's deliverable</h3><p>Written to <code>directive.md</code>, judged by the CEO's AgentReview Definition of Done: <span class="badge {verdict_cls}">{verdict}</span>.</p></div></div><div class="phase-body">"""
     )
-    for turn in data["chat"]:
-        cites = f'<span class="cite">◦ cited: {_esc(", ".join(turn["citations"]) or "—")} · tools: {_esc(", ".join(turn["tools"]) or "none")}</span>'
-        parts.append(f'<div class="msg u"><div class="who">You</div><div class="bub">{_esc(turn["q"])}</div></div>')
-        parts.append(f'<div class="msg c"><div class="who">CEO</div><div class="bub">{_esc(turn["a"])}{cites}</div></div>')
-    parts.append("</div></div></section>")
-
-    # Phase 7 — memory after
-    parts.append(
-        """<section class="phase"><div class="phase-head"><span class="pnum">7</span><div>
-<h3>The CEO's memory — after</h3><p>Its decision-log now records the audit; the conversation is remembered too.</p></div></div><div class="phase-body">"""
-    )
-    for e in data["memory_after"]:
-        parts.append(f'<div class="transition"><span class="kv">[{_esc(e["layer"])}] {_esc(e["text"][:260])}</span></div>')
+    if data["directive_md"]:
+        parts.append(f'<pre class="art" style="white-space:pre-wrap">{_esc(data["directive_md"])}</pre>')
+    else:
+        parts.append('<p class="why">(no directive.md written)</p>')
+    if meta["summary"]:
+        parts.append(f'<div class="transition"><span class="kv"><b>DoD summary:</b> {_esc(meta["summary"])}</span></div>')
     parts.append("</div></section>")
 
     parts.append(
@@ -416,6 +425,7 @@ def render_html(data: dict[str, Any]) -> str:
     )
     parts.append("""</div><script>document.addEventListener('keydown',e=>{if(e.key==='e'||e.key==='E')document.querySelectorAll('details').forEach(d=>d.open=true);});</script></body></html>""")
     return "".join(parts)
+
 
 
 async def main() -> int:

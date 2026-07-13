@@ -1,0 +1,160 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Horizon — CEO Capstone</title><style>
+:root{--bg:#f6f8fa;--card:#fff;--ink:#1f2328;--muted:#57606a;--line:#d0d7de;--accent:#0d9488;--accent-soft:#ecfeff;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 20px 80px;}
+header.top{background:linear-gradient(135deg,#ecfeff,#f6f8fa);border:1px solid var(--line);border-radius:16px;padding:28px 28px 22px;margin-bottom:22px;}
+header.top .eyebrow{color:var(--accent);font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:12px;}
+header.top h1{margin:.2em 0 .3em;font-size:26px;}
+header.top .intent{color:var(--muted);margin:0;}
+header.top .intent b{color:var(--ink);}
+.badge{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;}
+.badge.ok{background:#dcfce7;color:#166534;}
+.badge.warn{background:#fef9c3;color:#854d0e;}
+.badge.fail{background:#fee2e2;color:#b91c1c;}
+.badge.info{background:var(--accent-soft);color:#0e7490;}
+.reverify{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px 20px 18px;margin:22px 0;}
+.reverify h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:16px 0 6px;}
+.overall{display:flex;align-items:center;gap:14px;margin-top:14px;padding:14px 16px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0;}
+.overall .big{font-size:18px;font-weight:800;letter-spacing:.02em;color:#166534;}
+.overall p{margin:0;color:var(--muted);font-size:13px;}
+.chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:22px 0;}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;color:var(--muted);font-size:12.5px;}
+.chip span{display:block;font-size:24px;font-weight:750;color:var(--ink);line-height:1.1;}
+h2.sec{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:34px 0 12px;}
+.phase{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:16px;overflow:hidden;}
+.phase-head{display:flex;gap:14px;align-items:flex-start;padding:18px 20px 14px;border-bottom:1px solid var(--line);background:#fbfcfe;}
+.pnum{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-weight:750;display:grid;place-items:center;}
+.phase-head h3{margin:2px 0 3px;font-size:17px;}
+.phase-head p{margin:0;color:var(--muted);font-size:13.5px;}
+.phase-body{padding:14px 18px 18px;}
+table{width:100%;border-collapse:collapse;font-size:13.5px;}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;}
+td.num{font:12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;}
+.why{color:var(--muted);font-size:12.5px;font-style:italic;}
+.mono{font:12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#0e7490;}
+.decision-row{padding:12px 0;border-bottom:1px dashed var(--line);}
+.decision-row:last-child{border-bottom:none;}
+.decision-row .head{display:flex;align-items:center;gap:10px;}
+.decision-row .head b{font-size:14.5px;}
+.arrow{color:var(--accent);font-weight:750;}
+details.art{background:#fbfcfe;border:1px solid var(--line);border-radius:12px;margin:10px 0;}
+details.art>summary{cursor:pointer;padding:12px 16px;font-weight:650;font-size:13.5px;}
+details.art pre{margin:0;padding:0 16px 16px;white-space:pre-wrap;word-wrap:break-word;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#24292f;}
+details.ops{background:#f6f8ff;border-color:#c7d2fe;}
+.opgrid{display:flex;flex-wrap:wrap;gap:6px 8px;padding:4px 16px 10px;}
+.opbar{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #c7d2fe;border-radius:999px;padding:3px 10px;font-size:12px;color:#3730a3;}
+.opbar .opcount{background:#4f46e5;color:#fff;border-radius:999px;padding:0 7px;font-weight:700;font-size:11px;}
+.opseq{display:flex;flex-wrap:wrap;gap:4px;padding:0 16px 14px;}
+.opstep{font:11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#eef2ff;color:#4338ca;border-radius:5px;padding:2px 6px;}
+.opstep.err{background:#fee2e2;color:#b91c1c;}
+.transition{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:6px;font-size:13px;}
+.transition .kv{color:var(--muted);}
+.transition .kv b{color:var(--ink);}
+footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px;}
+
+.bubbles{display:flex;flex-direction:column;gap:10px;}
+.msg{display:flex;gap:10px;}
+.msg .who{flex:0 0 auto;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:12px;color:#fff;}
+.msg.u .who{background:#64748b;} .msg.c .who{background:#4f46e5;}
+.msg .bub{border-radius:12px;padding:11px 14px;font-size:14px;max-width:82%;}
+.msg.u .bub{background:#f1f5f9;} .msg.c .bub{background:#eef2ff;border:1px solid #c7d2fe;}
+.msg .bub .cite{display:block;margin-top:7px;font-size:11.5px;color:#3730a3;}
+.act{border:1px solid var(--line);border-radius:10px;padding:10px 13px;margin:8px 0;background:#fbfcfe;}
+.act .k{font-weight:700;}
+.act .auto{color:#166534;font-size:12px;} .act .pend{color:#854d0e;font-size:12px;}
+</style></head><body><div class="wrap">
+<header class="top"><div class="eyebrow">Horizon · chorus · the CEO governs, live</div>
+<h1>CEO Capstone — a chorus employee re-aims the company through the GovernancePort</h1>
+<p class="intent"><b>Company mission:</b> Grow next quarter&#x27;s profit using our sales warehouse, and back the recommendation with analysis a skeptical executive would accept.</p></header>
+<div class="reverify"><h2>One seam, both sides</h2>
+<p style="color:var(--muted);font-size:13.5px;margin:8px 0 0">A real company was built (LLM decomposition + real Analyst beats + a queue of proposals). Then the CEO — a genuine <b>chorus employee</b> whose <code>governance_*</code> tools bind to a dream <code>GovernancePort</code> — ran one governance beat. Every tool call read and re-aimed the <b>live horizon tree</b> through the port, yet chorus never imports horizon: they meet only at the contract.</p>
+<div class="overall"><span class="big ok">PASS</span><p>8 governance tool call(s) &middot; 0 hard errors · 1 recovered planning guardrail(s) &middot; 15 tool calls total &middot; 1 LLM calls &middot; DoD outcome: {&#x27;steps_total&#x27;: 1, &#x27;steps_done&#x27;: 1, &#x27;steps_blocked&#x27;: 0, &#x27;sprint_outcomes&#x27;: [&#x27;pass&#x27;], &#x27;cost_cents&#x27;: 0}</p></div></div>
+<div class="chips">
+<div class="chip"><span>4</span>Goals (LLM)</div>
+<div class="chip"><span>2</span>Real beats run</div>
+<div class="chip"><span>8</span>Governance tool calls</div>
+<div class="chip"><span>0</span>Hard errors</div>
+<div class="chip"><span>PASS</span>CEO DoD</div>
+</div><h2 class="sec">The executive loop, phase by phase</h2><section class="phase"><div class="phase-head"><span class="pnum">1</span><div>
+<h3>Company state — before the CEO</h3><p>The direction after real execution, plus the proposals queued for a decision.</p></div></div><div class="phase-body"><table><tr><th>score</th><th>priority</th><th>health</th><th>status</th><th>goal</th></tr><tr><td class="num">1.00</td><td>high</td><td>blocked</td><td>active</td><td>Build a profit-by-region-by-quarter analysis notebook from warehouse.db</td></tr><tr><td class="num">0.75</td><td>high</td><td>unknown</td><td>active</td><td>Generate next-quarter profit scenarios and rank regions by expected profit uplift</td></tr><tr><td class="num">0.60</td><td>medium</td><td>unknown</td><td>active</td><td>Write an executive-facing recommendation memo with reproducible figures and explicit assumptions</td></tr><tr><td class="num">0.42</td><td>medium</td><td>on_track</td><td><span class="badge ok">done</span></td><td>Quantify profit drivers and variability with sensitivity and contribution analysis</td></tr></table><div class="why" style="margin-top:10px">Proposals awaiting a decision:</div><div class="decision-row"><div class="head"><b>Rebrand the company logo and website next quarter</b><span class="badge info">conf 0.50 · 1 evidence</span></div><div class="transition"><span class="kv mono">prop_9e4d8b527a8d</span></div></div><div class="decision-row"><div class="head"><b>Concentrate next-quarter sales investment on Region A (highest profit efficiency)</b><span class="badge info">conf 0.86 · 3 evidence</span></div><div class="transition"><span class="kv mono">prop_fa6efda3ee33</span></div></div></div></section><section class="phase"><div class="phase-head"><span class="pnum">2</span><div>
+<h3>The CEO — a real chorus employee</h3><p>Its own manifest: executive toolset, isolated sandbox, its governance tools bound to the horizon control plane through the dream <code>GovernancePort</code>.</p></div></div><div class="phase-body">
+<div class="transition"><span class="kv"><b>governance tools:</b> governance_read, proposal_approve, proposal_reject, goal_set_priority, goal_archive</span></div>
+<div class="transition"><span class="kv"><b>sandbox:</b> unrestricted · max_turns 18 · max_sprints 3</span></div>
+<div class="transition"><span class="kv mono">Q:\projects\inspired-arc\horizon\.chorus\work\horizon-ceo-0711-100836-ceo\worktrees\ceo</span></div>
+<div class="transition"><span class="kv"><b>standing rule:</b> Approve well-evidenced proposals (three or more independent sources) that advance profitable growth, and reject distractions and low-evidence bets - protect the quarter&#x27;s single priority.</span></div>
+</div></section><section class="phase"><div class="phase-head"><span class="pnum">3</span><div>
+<h3>Governance beat — the CEO reads and re-aims the live tree</h3><p>Every <code>governance_*</code> call below hit the real horizon control plane through the port. Reasoning is interleaved.</p></div></div><div class="phase-body"><div class="act"><span class="k">→ governance_read</span><br><span class="mono" style="font-size:12px">{}</span></div><div class="transition"><span class="badge info">guardrail · governance_read</span> <span class="kv">read-only planning phase declined a mutation (recovered — the generator phase applied it)</span></div><details class="art"><summary>thinking</summary><pre>&lt;spec&gt;
+
+## Goal
+Complete **task run-ceo-govern-1** by reviewing the company’s current direction and **adjudicating all open proposals**, then writing a single decisive board-ready directive to `directive.md` (decision first; proposal-by-proposal reasons; risks + guardrails; ranked next actions).
+
+## Required approach (must-follow constraints)
+- **Source of truth:** use `governance_read` to obtain *all* standing decisions/goals and *all* open proposals. Do not use repo search, file reads, logs, telemetry, or web sources for company state.
+- **Adjudication actions:**
+  - Approve well-evidenced proposals with `proposal_approve` (standing rule: **3+ independent sources** and advances **profitable growth** / protects the quarter’s **single priority**).
+  - Reject distractions / low-evidence bets with `proposal_reject` (include a short reason).
+  - If warranted, adjust direction by reprioritizing goals via `goal_set_priority` (low/medium/high) or retiring done/obsolete goals via `goal_archive`.
+- **Deliverable:** write `directive.md` exactly once, and it must include:
+  - Decisions up top.
+  - For **each** proposal approved or rejected: include **proposal id + one-line reason**.
+  - Key risks with **one guardrail each**.
+  - Ranked next actions (clear owners/stop conditions where applicable).
+
+## Current blocker
+The environment currently does **not** provide access to `governance_read` (tool not in role manifest). Without it, I cannot lawfully adjudicate proposals or ground decisio</pre></details><div class="act"><span class="k">→ skill</span><br><span class="mono" style="font-size:12px">{&#x27;name&#x27;: &#x27;executive-decision-making&#x27;}</span></div><div class="transition"><span class="badge ok">← skill</span> <span class="kv">This skill&#x27;s bundled files (references, templates, examples) live in `.harness\skills\executive-decision-making/`. Read any file the body names — e.g. `read_file` on `.harness\skills\executive-decision-making/template.md` — as needed; they </span></div><div class="act"><span class="k">→ governance_read</span><br><span class="mono" style="font-size:12px">{}</span></div><div class="transition"><span class="badge ok">← governance_read</span> <span class="kv">DECISIONS / - [dec_ceo] (active) Grow next quarter&#x27;s profit using our sales warehouse, and back the recommendation with analysis a skeptical executive would accept. /     - [goal_862233c1b163] Build a profit-by-region-by-quarter analysis notebo</span></div><div class="act"><span class="k">→ proposal_reject</span><br><span class="mono" style="font-size:12px">{&#x27;proposal_id&#x27;: &#x27;prop_9e4d8b527a8d&#x27;, &#x27;reason&#x27;: &#x27;Off-strategy for current single priority (profit growth backed by warehouse analysis); no evidence it improves next quarter profit and would divert focus.&#x27;}</span></div><div class="transition"><span class="badge ok">← proposal_reject</span> <span class="kv">rejected proposal prop_9e4d8b527a8d</span></div><div class="act"><span class="k">→ proposal_approve</span><br><span class="mono" style="font-size:12px">{&#x27;proposal_id&#x27;: &#x27;prop_fa6efda3ee33&#x27;}</span></div><div class="transition"><span class="badge ok">← proposal_approve</span> <span class="kv">approved proposal prop_fa6efda3ee33 — it is now decision dec_b2778ef8556f</span></div><div class="act"><span class="k">→ goal_archive</span><br><span class="mono" style="font-size:12px">{&#x27;goal_id&#x27;: &#x27;goal_aab0b20b1e48&#x27;}</span></div><div class="transition"><span class="badge ok">← goal_archive</span> <span class="kv">archived goal goal_aab0b20b1e48</span></div><div class="act"><span class="k">→ goal_set_priority</span><br><span class="mono" style="font-size:12px">{&#x27;goal_id&#x27;: &#x27;goal_930c6e74e7a4&#x27;, &#x27;priority&#x27;: &#x27;high&#x27;}</span></div><div class="transition"><span class="badge ok">← goal_set_priority</span> <span class="kv">set goal goal_930c6e74e7a4 priority to high</span></div><div class="act"><span class="k">→ skill</span><br><span class="mono" style="font-size:12px">{&#x27;name&#x27;: &#x27;stakeholder-communication&#x27;}</span></div><div class="transition"><span class="badge ok">← skill</span> <span class="kv">This skill&#x27;s bundled files (references, templates, examples) live in `.harness\skills\stakeholder-communication/`. Read any file the body names — e.g. `read_file` on `.harness\skills\stakeholder-communication/template.md` — as needed; they </span></div><div class="act"><span class="k">→ skill</span><br><span class="mono" style="font-size:12px">{&#x27;name&#x27;: &#x27;risk-and-downside-management&#x27;}</span></div><div class="transition"><span class="badge ok">← skill</span> <span class="kv">This skill&#x27;s bundled files (references, templates, examples) live in `.harness\skills\risk-and-downside-management/`. Read any file the body names — e.g. `read_file` on `.harness\skills\risk-and-downside-management/template.md` — as needed;</span></div><div class="act"><span class="k">→ write_file</span><br><span class="mono" style="font-size:12px">{&#x27;path&#x27;: &#x27;directive.md&#x27;, &#x27;content&#x27;: &#x27;DECISION: We will reject the rebrand proposal, approve concentrating next-quarter sales investment on Region A, and refocus execution by unblocking the warehouse profit notebook and delivering an executi...</span></div><div class="transition"><span class="badge ok">← write_file</span> <span class="kv">Wrote Q:\projects\inspired-arc\horizon\.chorus\work\horizon-ceo-0711-100836-ceo\worktrees\ceo\directive.md</span></div><div class="act"><span class="k">→ bash</span><br><span class="mono" style="font-size:12px">{&#x27;command&#x27;: &#x27;python -c &quot;import os,sys; p=\&#x27;directive.md\&#x27;; assert os.path.exists(p) and os.path.getsize(p)&gt;0; print(\&#x27;directive.md ok\&#x27;)&quot;&#x27;}</span></div><div class="transition"><span class="badge ok">← bash</span> <span class="kv">directive.md ok</span></div><div class="act"><span class="k">→ governance_read</span><br><span class="mono" style="font-size:12px">{}</span></div><div class="transition"><span class="badge ok">← governance_read</span> <span class="kv">DECISIONS / - [dec_b2778ef8556f] (active) Concentrate next-quarter sales investment on Region A (highest profit efficiency) /     - [goal_11dedaa91dcb] Draft the Region A investment plan — priority=high health=unknown status=active score=0.90 m</span></div><details class="art"><summary>thinking</summary><pre>Completed sprint 1 governance adjudication.
+
+- Ran `governance_read`, adjudicated **all** open proposals:
+  - **prop_9e4d8b527a8d** → **rejected** (recorded via `proposal_reject`)
+  - **prop_fa6efda3ee33** → **approved** (recorded via `proposal_approve`, promoted to **dec_b2778ef8556f**)
+- Updated standing goals based on evidence:
+  - **goal_aab0b20b1e48** → **archived** because status was **done** (`goal_archive`)
+  - **goal_930c6e74e7a4** → priority raised **medium → high** to match the exec-facing deliverable need (`goal_set_priority`)
+- Verified state: `governance_read` now shows **OPEN PROPOSALS: none**.
+- Created **directive.md** (non-empty) with:
+  - one-sentence decision summary at the top
+  - each proposal id + one-line approve/reject reason
+  - risks section with explicit guardrails
+  - ranked next actions with owners and time bounds
+
+Deliverable: `directive.md` is written in the working tree.</pre></details><div class="act"><span class="k">→ read_file</span><br><span class="mono" style="font-size:12px">{&#x27;path&#x27;: &#x27;directive.md&#x27;}</span></div><div class="transition"><span class="badge ok">← read_file</span> <span class="kv">     1	DECISION: We will reject the rebrand proposal, approve concentrating next-quarter sales investment on Region A, and refocus execution by unblocking the warehouse profit notebook and delivering an executive memo as a top-priority deli</span></div><div class="act"><span class="k">→ read_file</span><br><span class="mono" style="font-size:12px">{&#x27;path&#x27;: &#x27;governance-ledger.md&#x27;}</span></div><div class="transition"><span class="badge ok">← read_file</span> <span class="kv">     1	# Governance ledger — actions taken this beat /      2	 /      3	- REJECTED proposal prop_9e4d8b527a8d (by ceo) — reason: Off-strategy for current single priority (profit growth backed by warehouse analysis); no evidence it improves next</span></div><div class="act"><span class="k">→ governance_read</span><br><span class="mono" style="font-size:12px">{}</span></div><div class="transition"><span class="badge ok">← governance_read</span> <span class="kv">DECISIONS / - [dec_b2778ef8556f] (active) Concentrate next-quarter sales investment on Region A (highest profit efficiency) /     - [goal_11dedaa91dcb] Draft the Region A investment plan — priority=high health=unknown status=active score=0.90 m</span></div><details class="art"><summary>thinking</summary><pre>&lt;verdict&gt;
+{
+  &quot;outcome&quot;: &quot;pass&quot;,
+  &quot;score&quot;: 0.92,
+  &quot;notes&quot;: &quot;All proposals adjudicated and recorded; one stale/done goal archived and one misprioritised goal raised; directive has clear decision, reasons grounded in ids, risks+guardrails, and ranked actions with owners/time bounds.&quot;,
+  &quot;items&quot;: []
+}
+&lt;/verdict&gt;</pre></details></div></section><section class="phase"><div class="phase-head"><span class="pnum">4</span><div>
+<h3>Company state — after the CEO</h3><p>The direction after the executive re-aimed it: approvals promoted to live decisions, distractions rejected.</p></div></div><div class="phase-body"><table><tr><th>score</th><th>priority</th><th>health</th><th>status</th><th>goal</th></tr><tr><td class="num">0.90</td><td>high</td><td>unknown</td><td>active</td><td>Draft the Region A investment plan</td></tr><tr><td class="num">0.70</td><td>medium</td><td>unknown</td><td>active</td><td>Define the success metric + guardrail</td></tr><tr><td class="num">1.00</td><td>high</td><td>blocked</td><td>active</td><td>Build a profit-by-region-by-quarter analysis notebook from warehouse.db</td></tr><tr><td class="num">0.75</td><td>high</td><td>unknown</td><td>active</td><td>Generate next-quarter profit scenarios and rank regions by expected profit uplift</td></tr><tr><td class="num">0.75</td><td>high</td><td>unknown</td><td>active</td><td>Write an executive-facing recommendation memo with reproducible figures and explicit assumptions</td></tr><tr><td class="num">0.42</td><td>medium</td><td>on_track</td><td><span class="badge fail">archived</span></td><td>Quantify profit drivers and variability with sensitivity and contribution analysis</td></tr></table><div class="why" style="margin-top:10px">Proposals, after adjudication:</div><div class="decision-row"><div class="head"><b>Rebrand the company logo and website next quarter</b><span class="badge fail">rejected</span></div><div class="transition"><span class="kv mono">prop_9e4d8b527a8d</span></div></div><div class="decision-row"><div class="head"><b>Concentrate next-quarter sales investment on Region A (highest profit efficiency)</b><span class="badge ok">approved</span></div><div class="transition"><span class="kv mono">prop_fa6efda3ee33</span></div></div></div></section><section class="phase"><div class="phase-head"><span class="pnum">5</span><div>
+<h3>The directive — the CEO's deliverable</h3><p>Written to <code>directive.md</code>, judged by the CEO's AgentReview Definition of Done: <span class="badge ok">PASS</span>.</p></div></div><div class="phase-body"><pre class="art" style="white-space:pre-wrap">DECISION: We will reject the rebrand proposal, approve concentrating next-quarter sales investment on Region A, and refocus execution by unblocking the warehouse profit notebook and delivering an executive memo as a top-priority deliverable.
+
+WHY (evidence)
+- Our single standing decision is to grow next quarter’s profit using the sales warehouse with skeptical-exec-grade analysis (dec_ceo); work that doesn’t advance that is deprioritized.
+- Goal health shows the core analysis artifact is blocked: goal_862233c1b163 (profit-by-region-by-quarter notebook) is priority=high but health=blocked, making it the critical path.
+- The exec recommendation memo was only priority=medium despite being the key board-facing output; we raised goal_930c6e74e7a4 to high to match the decision’s intent.
+
+PROPOSAL ADJUDICATION (each id + one-line reason)
+- prop_9e4d8b527a8d — REJECTED: Off-strategy vs dec_ceo; insufficient evidence it improves next-quarter profit and it would divert attention from blocked core analysis.
+- prop_fa6efda3ee33 — APPROVED: Aligned with dec_ceo’s profit-growth mandate and has higher confidence/evidence in the queue; proceed, contingent on warehouse-based validation.
+
+GOAL GOVERNANCE CHANGES
+- goal_aab0b20b1e48 — ARCHIVED: status=done; retire to reduce noise and keep focus on remaining deliverables.
+- goal_930c6e74e7a4 — PRIORITY set to HIGH: the executive-facing memo is a required output to make the profit-growth recommendation actionable.
+
+RISKS &amp; GUARDRAILS
+1) Risk: Region A focus is wrong due to analysis error or incomplete/biased Q1–Q3 signal.
+   - Guardrail: No spend reallocation beyond a small pilot until goal_862233c1b163 produces a reproducible table from warehouse.db and goal_d9b53928e0e8 produces Q4 scenarios; revisit the Region A decision if scenarios do not show Region A as top incremental profit opportunity.
+2) Risk: The blocked notebook goal stalls the entire program (critical path risk).
+   - Guardrail: If goal_862233c1b163 remains blocked 48 hours from now, engineering analytics lead must escalate with a concrete unblock plan (data access, schema docs, or tooling) and we will pause downstream memo writing until the artifact runs end-to-end from a fresh checkout.
+3) Risk: Executive memo becomes opinionated narrative without reproducible figures.
+   - Guardrail: Memo (goal_930c6e74e7a4) must cite the exact generated tables/figures from the notebook/scenario outputs; if citations are missing, memo is not publishable.
+
+RANKED NEXT ACTIONS (owner + time bound)
+1) Analytics Eng (owner: Analytics Lead) — This week: Unblock and deliver goal_862233c1b163 end-to-end reproducible notebook/script generating profit by region and quarter from warehouse.db.
+2) Finance Analytics (owner: FP&amp;A Lead) — Next sprint: Deliver goal_d9b53928e0e8 Q4 scenario table (baseline/optimistic/conservative) and ranked regions by incremental profit.
+3) CEO Staff / BizOps (owner: Chief of Staff) — Next sprint: Draft goal_930c6e74e7a4 executive memo (1–2 pages) using outputs from (1) and (2), including assumptions/limits and the explicit recommendation.
+4) Sales Ops (owner: Sales Ops Manager) — This week: Define what a “small pilot” spend shift means (cap, channels, and measurement) so Region A focus can be tested safely once scenarios validate it.
+</pre><div class="transition"><span class="kv"><b>DoD summary:</b> plan complete: 1/1 steps done</span></div></div></section><footer>Generated 2026-07-11T10:16:56+00:00 from a live CEO run · model gpt-5.2 (Azure) · Press E to expand all.</footer></div><script>document.addEventListener('keydown',e=>{if(e.key==='e'||e.key==='E')document.querySelectorAll('details').forEach(d=>d.open=true);});</script></body></html>

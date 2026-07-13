@@ -1,0 +1,160 @@
+"""``HorizonGovernance`` — horizon's end of the governance seam, proven over fakes (no LLM, no beats).
+
+The mirror of chorus's ``tests/tools/test_governance.py`` (which pins the CEO's tools against a fake
+port). Here the real Horizon facade *is* the port: an approved proposal has already authored a live
+decision + goals, so ``read_direction`` folds that tree, and each write verb delegates to the facade and
+mutates real state. Chorus's tool tests + this adapter test together prove the whole seam end-to-end:
+CEO tool → dream ``GovernancePort`` → horizon facade → the direction changes.
+"""
+
+from __future__ import annotations
+
+import pytest
+from dream.contracts import GovernancePort
+
+from horizon import Horizon
+from horizon.generation import CandidateGoal, DirectionBrief, ProposalStore
+from horizon.governance import HorizonGovernance
+from horizon.store import DecisionStore, StrategyStore
+from tests.fakes import FakeGoalStore, FakeIntakePort, FakeOutcomeFeed
+
+
+def _horizon(tmp_path):
+    horizon = Horizon(
+        goals=FakeGoalStore(),
+        intake=FakeIntakePort(),
+        outcomes=FakeOutcomeFeed(),
+        reasoner=None,
+        decisions=DecisionStore(tmp_path / "d.json"),
+        strategy=StrategyStore(tmp_path / "s.json"),
+        proposals=ProposalStore(tmp_path / "p.json"),
+        default_assignee="moe",
+    )
+    return horizon
+
+
+def _brief(recommendation: str, *, confidence: float = 0.9):
+    return DirectionBrief(
+        candidate_id="c1",
+        recommendation=recommendation,
+        rationale="the evidence points here",
+        confidence=confidence,
+        risks=["data may be stale"],
+        candidate_goals=[
+            CandidateGoal(
+                title="Quantify the upside",
+                metric="incremental profit",
+                target="+10% QoQ",
+                rationale="ground it in numbers",
+                score=0.9,
+            )
+        ],
+        evidence_refs=["ev_1"],
+    )
+
+
+def test_horizon_governance_satisfies_the_port(tmp_path) -> None:
+    gov = HorizonGovernance(_horizon(tmp_path))
+    # structural (runtime_checkable) — no nominal inheritance, exactly how the factory accepts it
+    assert isinstance(gov, GovernancePort)
+
+
+def test_read_direction_folds_the_live_tree_and_open_proposals(tmp_path) -> None:
+    horizon = _horizon(tmp_path)
+    dec_id = horizon.approve_proposal(horizon.reconcile([_brief("Grow in region A")])[0].id, by="ceo")
+    open_p = horizon.reconcile([_brief("Expand to region B")])[0]
+
+    view = HorizonGovernance(horizon).read_direction()
+
+    live = next(d for d in view.decisions if d.decision_id == dec_id)
+    assert live.goals  # the approved proposal authored real goals
+    assert all(g.priority in {"high", "medium", "low"} for g in live.goals)
+    proposal = next(p for p in view.proposals if p.proposal_id == open_p.id)
+    assert proposal.confidence is not None and proposal.evidence >= 1
+
+
+def test_decided_proposals_survive_the_read_after_adjudication(tmp_path) -> None:
+    """After approve/reject a proposal leaves the OPEN list — it MUST still be visible under ``decided``.
+
+    This is the fix for the verifier trap: without it, the CEO's own just-completed adjudication would
+    vanish from the next read and a reviewer would wrongly conclude nothing was done.
+    """
+    horizon = _horizon(tmp_path)
+    approved = horizon.reconcile([_brief("Grow region A")])[0]
+    rejected = horizon.reconcile([_brief("Rebrand the logo")])[0]
+    gov = HorizonGovernance(horizon)
+    gov.approve_proposal(approved.id, by="ceo")
+    gov.reject_proposal(rejected.id, by="ceo", reason="thin")
+
+    view = gov.read_direction()
+    assert view.proposals == ()  # nothing open anymore
+    decided_ids = {p.proposal_id: p.status for p in view.decided}
+    assert decided_ids.get(approved.id) == "approved"
+    assert decided_ids.get(rejected.id) == "rejected"
+
+
+def test_write_verbs_delegate_to_the_facade_and_mutate_state(tmp_path) -> None:
+    horizon = _horizon(tmp_path)
+    horizon.approve_proposal(horizon.reconcile([_brief("Grow in region A")])[0].id, by="ceo")
+    open_p = horizon.reconcile([_brief("Expand to region B")])[0]
+    gov = HorizonGovernance(horizon)
+
+    # approve the still-open proposal through the port — a new live decision appears
+    new_dec = gov.approve_proposal(open_p.id, by="ceo")
+    assert horizon.list_proposals(status="proposed") == []
+    after = gov.read_direction()
+    assert any(d.decision_id == new_dec for d in after.decisions)
+
+    # reprioritise then archive a real goal through the port
+    goal = next(d for d in after.decisions if d.goals).goals[0]
+    assert gov.set_priority(goal.goal_id, "high") == "high"
+    gov.archive_goal(goal.goal_id)
+    archived = next(
+        g
+        for d in gov.read_direction().decisions
+        for g in d.goals
+        if g.goal_id == goal.goal_id
+    )
+    assert archived.status == "archived"
+
+
+def test_reject_through_the_port_closes_the_proposal(tmp_path) -> None:
+    horizon = _horizon(tmp_path)
+    open_p = horizon.reconcile([_brief("Expand to region B")])[0]
+    gov = HorizonGovernance(horizon)
+
+    gov.reject_proposal(open_p.id, by="ceo", reason="too thin")
+
+    assert gov.read_direction().proposals == ()
+    assert horizon.list_proposals(status="rejected")[0].id == open_p.id
+
+
+def test_approve_and_reject_are_idempotent(tmp_path) -> None:
+    """A governance beat re-attempts calls across dream's phases/sprints — a second call is a no-op.
+
+    Without this the second attempt raises ``ProposalNotOpen`` ("already approved"), which spirals the
+    CEO into re-reading and re-acting. Idempotency keeps a re-attempt a clean success.
+    """
+    horizon = _horizon(tmp_path)
+    approve_p = horizon.reconcile([_brief("Grow region A")])[0]
+    reject_p = horizon.reconcile([_brief("Rebrand the logo")])[0]
+    gov = HorizonGovernance(horizon)
+
+    dec = gov.approve_proposal(approve_p.id, by="ceo")
+    assert gov.approve_proposal(approve_p.id, by="ceo") == approve_p.id  # 2nd approve: no-op success
+    assert dec  # the first returned a real decision id
+
+    gov.reject_proposal(reject_p.id, by="ceo", reason="thin")
+    gov.reject_proposal(reject_p.id, by="ceo", reason="thin")  # 2nd reject: no-op, no raise
+    assert horizon.list_proposals(status="rejected")[0].id == reject_p.id
+
+
+def test_a_real_state_conflict_still_raises(tmp_path) -> None:
+    """Idempotency only forgives the SAME terminal state — flipping approved↔rejected still conflicts."""
+    horizon = _horizon(tmp_path)
+    p = horizon.reconcile([_brief("Grow region A")])[0]
+    gov = HorizonGovernance(horizon)
+    gov.approve_proposal(p.id, by="ceo")
+
+    with pytest.raises(Exception):  # rejecting an already-approved proposal is a genuine conflict
+        gov.reject_proposal(p.id, by="ceo", reason="changed my mind")

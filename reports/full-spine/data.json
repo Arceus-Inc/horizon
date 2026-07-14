@@ -1,0 +1,97 @@
+{
+  "ran_at": "0714-100514",
+  "company_id": "spine-0714-100514",
+  "deployment": "gpt-5.2",
+  "beat_timeout_s": 180.0,
+  "episodic_records": 2,
+  "outcome_events": 2,
+  "proposal_statuses": {
+    "prop_24485a69b540": "rejected",
+    "prop_686d9dfcd529": "approved"
+  },
+  "checks": [
+    {
+      "name": "intake goal_spine_api \u2192 task at high",
+      "ok": true,
+      "detail": "task=task_741630a805ba"
+    },
+    {
+      "name": "intake goal_spine_api idempotent",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "intake goal_spine_docs \u2192 task at medium",
+      "ok": true,
+      "detail": "task=task_4094c2c2c5da"
+    },
+    {
+      "name": "intake goal_spine_docs idempotent",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "beat goal_spine_api done",
+      "ok": true,
+      "detail": "status=done"
+    },
+    {
+      "name": "beat goal_spine_docs done",
+      "ok": true,
+      "detail": "status=done"
+    },
+    {
+      "name": "episodic records captured",
+      "ok": true,
+      "detail": "count=2"
+    },
+    {
+      "name": "outcome events on the bus",
+      "ok": true,
+      "detail": "run_evaluated=2"
+    },
+    {
+      "name": "goal health moved on_track",
+      "ok": true,
+      "detail": "health=on_track"
+    },
+    {
+      "name": "goal score decayed after landing",
+      "ok": true,
+      "detail": "score=0.45"
+    },
+    {
+      "name": "chorus task reprioritised by feedback",
+      "ok": true,
+      "detail": "priority=medium"
+    },
+    {
+      "name": "CEO approved the strong proposal",
+      "ok": true,
+      "detail": "status=approved"
+    },
+    {
+      "name": "CEO rejected the weak proposal",
+      "ok": true,
+      "detail": "status=rejected"
+    },
+    {
+      "name": "CEO wrote directive.md",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "CEO beat passed its DoD",
+      "ok": true,
+      "detail": "plan complete: 1/1 steps done"
+    },
+    {
+      "name": "adjudications visible in decided[]",
+      "ok": true,
+      "detail": "decided=2"
+    }
+  ],
+  "passed": 16,
+  "total": 16,
+  "all_pass": true
+}

@@ -115,6 +115,7 @@ async def main() -> int:
 
     tool_calls: list[str] = []
     tool_errors: list[tuple[str, str]] = []
+    tool_results: list[tuple[str, bool]] = []  # (tool, is_error) in call order
 
     def obs(ev: Event) -> None:
         p = ev.payload
@@ -125,6 +126,7 @@ async def main() -> int:
             err = bool(p.get("is_error"))
             content = str(p.get("content_preview"))[:160]
             print(f"  [tool <-] {p.get('tool')}{' (ERROR)' if err else ''}  {content}")
+            tool_results.append((str(p.get("tool")), err))
             if err:
                 tool_errors.append((str(p.get("tool")), content))
         elif ev.kind is EventKind.RUN_TEXT:
@@ -147,16 +149,29 @@ async def main() -> int:
     props = {p.id: p.status for p in horizon.list_proposals(status=None)}
     gov_names = {"governance_read", "proposal_approve", "proposal_reject", "goal_set_priority", "goal_archive"}
     gov_calls = [t for t in tool_calls if t in gov_names]
-    # Two kinds of tool error are very different:
+    # Three kinds of tool error are very different:
     #  - GUARDRAIL refusals ("tool-not-in-role-manifest"): dream's read-only planner/evaluator phases
     #    correctly refusing a MUTATION during planning. Recoverable by design — the generator phase does
     #    the real work — and it happens for every role, not just the CEO. Not a bug.
-    #  - HARD errors: a port exception, a bad-vocab priority, an unknown id, an unknown tool. THOSE are
-    #    real defects in the seam and must fail the probe.
+    #  - RECOVERED refusals ("refused: …" the tool declined with a hint, and a LATER call of the SAME
+    #    tool succeeded): the error contract working — a model miscall (wrong id, bad vocab) that the
+    #    seam turned into a corrective hint. The end-state checks below stay authoritative.
+    #  - HARD errors: a port exception, an unknown tool, or a refusal the agent never recovered from.
+    #    THOSE are real defects in the seam and must fail the probe.
     def _is_guardrail(msg: str) -> bool:
         return "tool-not-in-role-manifest" in msg
+
+    def _recovered(tool: str, msg: str) -> bool:
+        if not msg.startswith("refused:"):
+            return False
+        last_err = max(i for i, (t, e) in enumerate(tool_results) if t == tool and e)
+        return any(t == tool and not e for t, e in tool_results[last_err + 1 :])
+
     guardrail = [(t, c) for t, c in tool_errors if _is_guardrail(c)]
-    hard_errors = [(t, c) for t, c in tool_errors if not _is_guardrail(c)]
+    recovered = [(t, c) for t, c in tool_errors if not _is_guardrail(c) and _recovered(t, c)]
+    hard_errors = [
+        (t, c) for t, c in tool_errors if not _is_guardrail(c) and not _recovered(t, c)
+    ]
     gov_hard = [(t, c) for t, c in hard_errors if t in gov_names]
 
     print("\n=== VERIFY ===")
@@ -167,6 +182,7 @@ async def main() -> int:
     print(f"proposal statuses   = {props}")
     print(f"directive written   = {(mat.working_dir / 'directive.md').is_file()}")
     print(f"guardrail refusals  = {len(guardrail)} (read-only planning phases; recovered)")
+    print(f"recovered refusals  = {len(recovered)} (tool declined with a hint; agent recovered)")
     print(f"HARD tool errors    = {len(hard_errors)}")
 
     failures: list[str] = []

@@ -1,0 +1,84 @@
+{
+  "company_id": "latch-0714-112323",
+  "cycles": 2,
+  "passed": 15,
+  "total": 15,
+  "all_pass": true,
+  "checks": [
+    {
+      "name": "c1 strong proposal approved",
+      "ok": true,
+      "detail": "approved"
+    },
+    {
+      "name": "c1 weak proposal rejected",
+      "ok": true,
+      "detail": "rejected"
+    },
+    {
+      "name": "c1 CEO beat passed DoD",
+      "ok": true,
+      "detail": "plan complete: 1/1 steps done"
+    },
+    {
+      "name": "c1 directive.md written",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "c1 approval produced tasks",
+      "ok": true,
+      "detail": "3 task(s)"
+    },
+    {
+      "name": "c1 all worker tasks done",
+      "ok": true,
+      "detail": "3/3"
+    },
+    {
+      "name": "c1 episodic captured for done beats",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "c2 strong proposal approved",
+      "ok": true,
+      "detail": "approved"
+    },
+    {
+      "name": "c2 weak proposal rejected",
+      "ok": true,
+      "detail": "rejected"
+    },
+    {
+      "name": "c2 CEO beat passed DoD",
+      "ok": true,
+      "detail": "plan complete: 1/1 steps done"
+    },
+    {
+      "name": "c2 directive.md written",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "c2 approval produced tasks",
+      "ok": true,
+      "detail": "2 task(s)"
+    },
+    {
+      "name": "c2 all worker tasks done",
+      "ok": true,
+      "detail": "2/2"
+    },
+    {
+      "name": "c2 episodic captured for done beats",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "intake idempotent across cycles",
+      "ok": true,
+      "detail": "5 tasks before and after resubmit"
+    }
+  ]
+}

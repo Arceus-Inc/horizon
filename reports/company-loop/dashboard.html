@@ -1,0 +1,58 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Latch — company loop</title><style>
+body{margin:0;font:14px/1.5 -apple-system,"Helvetica Neue",Arial,sans-serif;background:#111312;color:#e8e6df}
+header{position:sticky;top:0;background:#181b1a;border-bottom:1px solid #2a2e2c;padding:12px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+h1{font-size:16px;font-weight:600;margin:0}
+.chip{padding:2px 10px;border-radius:999px;font-size:12px;border:1px solid #3a3f3d;cursor:pointer;user-select:none}
+.chip.on{background:#2a2e2c}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+#status{font-size:12px;color:#9aa09c;margin-left:auto}
+#feed{padding:12px 20px 60px;max-width:1100px;margin:0 auto}
+.ev{display:flex;gap:10px;padding:5px 8px;border-left:3px solid #333;margin:2px 0;background:#161918;border-radius:0 6px 6px 0;align-items:baseline}
+.ev .ts{color:#6f7672;font-size:11px;min-width:56px}
+.ev .cy{font-size:11px;color:#9aa09c;min-width:24px}
+.ev .who{font-size:11px;color:#c9cec9;min-width:44px}
+.ev .ti{flex:0 0 auto}
+.ev .de{color:#9aa09c;font-size:12px;white-space:pre-wrap;word-break:break-word;flex:1;min-width:0}
+.horizon{border-color:#D85A30}.chorus{border-color:#1D9E75}.dream{border-color:#7F77DD}
+.lattice{border-color:#D4537E}.run{border-color:#B4B2A9}
+.k-error .ti{color:#F09595}.k-check-pass .ti{color:#97C459}.k-check-fail .ti{color:#F09595}
+.k-beat .ti{color:#AFA9EC}.k-verdict .ti{color:#5DCAA5}
+#knobs{font-size:12px;color:#9aa09c;padding:8px 20px;border-bottom:1px solid #2a2e2c;display:none;white-space:pre-wrap}
+</style></head><body>
+<header><h1>Latch — company loop</h1>
+<span class="chip on" data-f="all">all</span>
+<span class="chip on" data-f="horizon"><span class="dot" style="background:#D85A30"></span>horizon</span>
+<span class="chip on" data-f="chorus"><span class="dot" style="background:#1D9E75"></span>chorus</span>
+<span class="chip on" data-f="dream"><span class="dot" style="background:#7F77DD"></span>dream</span>
+<span class="chip on" data-f="lattice"><span class="dot" style="background:#D4537E"></span>lattice</span>
+<span class="chip" id="knobBtn">knobs</span>
+<span class="chip on" id="follow">follow</span>
+<span id="status">connecting…</span></header>
+<div id="knobs"></div><div id="feed"></div>
+<script>
+let seen=0,on={all:1,horizon:1,chorus:1,dream:1,lattice:1,run:1},follow=1;
+const feed=document.getElementById('feed'),status=document.getElementById('status');
+document.querySelectorAll('.chip[data-f]').forEach(c=>c.onclick=()=>{const f=c.dataset.f;
+ if(f==='all'){const v=!on.all;Object.keys(on).forEach(k=>on[k]=v);document.querySelectorAll('.chip[data-f]').forEach(x=>x.classList.toggle('on',v));}
+ else{on[f]=!on[f];c.classList.toggle('on',on[f]);}
+ document.querySelectorAll('.ev').forEach(e=>e.style.display=on[e.dataset.c]?'flex':'none');});
+document.getElementById('follow').onclick=e=>{follow=!follow;e.target.classList.toggle('on',follow);};
+document.getElementById('knobBtn').onclick=()=>{const k=document.getElementById('knobs');k.style.display=k.style.display==='block'?'none':'block';};
+function row(e){const d=document.createElement('div');d.className='ev '+e.component+' k-'+e.kind;d.dataset.c=e.component;
+ d.style.display=on[e.component]?'flex':'none';
+ d.innerHTML='<span class="ts">'+e.ts+'</span><span class="cy">'+(e.cycle?('c'+e.cycle):'')+'</span>'+
+ '<span class="who">'+(e.employee||'')+'</span><span class="ti"></span><span class="de"></span>';
+ d.querySelector('.ti').textContent=e.title;d.querySelector('.de').textContent=e.detail||'';return d;}
+async function poll(){try{
+ const r=await fetch('events.jsonl?_='+Date.now(),{cache:'no-store'});const t=await r.text();
+ const lines=t.split('\n').filter(Boolean);
+ if(lines.length>seen){for(let i=seen;i<lines.length;i++){const e=JSON.parse(lines[i]);
+  if(e.kind==='knobs'){document.getElementById('knobs').textContent=e.detail;continue;}
+  feed.appendChild(row(e));}
+  seen=lines.length;if(follow)window.scrollTo(0,document.body.scrollHeight);}
+ const last=lines.length?JSON.parse(lines[lines.length-1]):null;
+ status.textContent=lines.length+' events'+(last&&last.kind==='finished'?' — run finished':' — live');
+}catch(err){status.textContent='stream ended ('+seen+' events)';}
+setTimeout(poll,1500);}poll();
+</script></body></html>

@@ -33,6 +33,7 @@ def _team_goal() -> Goal:
         title="Ship coordinated launch",
         score=0.9,
         delivery_shape="team",
+        lead_professions=("pm",),
         staffing_requirements=(
             StaffingRequirement(profession="engineer", count=2),
             StaffingRequirement(profession="designer"),
@@ -48,6 +49,7 @@ def test_delegated_submitter_records_request_and_durable_identities(tmp_path) ->
             title="Ship coordinated launch",
             score=0.9,
             delivery_shape="team",
+            lead_professions=_team_goal().lead_professions,
             staffing_requirements=_team_goal().staffing_requirements,
         )
     )
@@ -65,6 +67,7 @@ def test_delegated_submitter_records_request_and_durable_identities(tmp_path) ->
             goal_id="goal-1",
             priority="high",
             requirements=_team_goal().staffing_requirements,
+            lead_professions=_team_goal().lead_professions,
             origin_fingerprint=port.requests[0].origin_fingerprint,
         )
     ]

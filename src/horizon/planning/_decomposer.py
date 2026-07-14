@@ -35,11 +35,17 @@ Rules:
     only when coordinated professions are required.
 - Titles are concrete and imperative ("Build the note-capture REST API", not "Backend work").
 - For each goal give: `metric` (how we know it is done), `target` (the concrete bar), a short
-    `rationale`, a `score` in [0,1], `delivery_shape` (`single` or `team`), and
-    `staffing_requirements` (`[]` for single; profession/count objects for team).
+    `rationale`, a `score` in [0,1], `delivery_shape` (`single` or `team`),
+    `lead_professions` (`[]` for single; allowed functional owner professions for team), and
+    `staffing_requirements` (`[]` for single; profession/count/coverage/outcome_area objects for team).
+- Prefer outcome-area goals owned by a functional lead. Use `coverage: "direct"` when specialists are
+    that lead's direct reports. Use `coverage: "subtree"` only for a cross-functional root whose leaf
+    professions are covered through bounded functional branches; group those leaves by `outcome_area`.
+- The permanent hierarchy is at most CEO -> functional lead -> specialist. Do not emit generic
+    engineer, manager, or reviewer professions.
 - Order goals by score, highest first.
 - Output STRICT JSON only — no prose, no code fences — matching exactly:
-    {"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0, "delivery_shape": "single", "staffing_requirements": []}]}
+    {"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0, "delivery_shape": "single", "lead_professions": [], "staffing_requirements": []}]}
 
 DECISION:
 __STATEMENT__
@@ -52,7 +58,7 @@ _CONTEXT_BLOCK = (
 )
 _RETRY_SUFFIX = (
     "\n\nIMPORTANT: your previous reply could not be parsed. Reply with STRICT JSON ONLY — exactly "
-    '{"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0, "delivery_shape": "single", "staffing_requirements": []}]} '
+    '{"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0, "delivery_shape": "single", "lead_professions": [], "staffing_requirements": []}]} '
     "— no prose, no markdown, no code fences."
 )
 
@@ -80,6 +86,7 @@ _RESPONSE_FORMAT: dict[str, Any] = {
                             "rationale",
                             "score",
                             "delivery_shape",
+                            "lead_professions",
                             "staffing_requirements",
                         ],
                         "properties": {
@@ -89,15 +96,29 @@ _RESPONSE_FORMAT: dict[str, Any] = {
                             "rationale": {"type": "string"},
                             "score": {"type": "number"},
                             "delivery_shape": {"type": "string", "enum": ["single", "team"]},
+                            "lead_professions": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
                             "staffing_requirements": {
                                 "type": "array",
                                 "items": {
                                     "type": "object",
                                     "additionalProperties": False,
-                                    "required": ["profession", "count"],
+                                    "required": [
+                                        "profession",
+                                        "count",
+                                        "coverage",
+                                        "outcome_area",
+                                    ],
                                     "properties": {
                                         "profession": {"type": "string"},
                                         "count": {"type": "integer", "minimum": 1},
+                                        "coverage": {
+                                            "type": "string",
+                                            "enum": ["direct", "subtree"],
+                                        },
+                                        "outcome_area": {"type": ["string", "null"]},
                                     },
                                 },
                             },
@@ -146,9 +167,20 @@ def _staffing_requirements(value: object) -> tuple[StaffingRequirement, ...]:
             continue
         profession = str(item.get("profession", "")).strip()
         count = item.get("count", 1)
+        coverage = item.get("coverage", "direct")
+        outcome_area = _opt_str(item.get("outcome_area"))
         if not profession or isinstance(count, bool) or not isinstance(count, int) or count < 1:
             continue
-        requirements.append(StaffingRequirement(profession=profession, count=count))
+        if coverage not in {"direct", "subtree"}:
+            continue
+        requirements.append(
+            StaffingRequirement(
+                profession=profession,
+                count=count,
+                coverage=coverage,
+                outcome_area=outcome_area,
+            )
+        )
     return tuple(requirements)
 
 
@@ -178,8 +210,20 @@ def _parse_goals(text: str) -> list[dict[str, Any]]:
             continue
         seen.add(key)
         delivery_shape = "team" if item.get("delivery_shape") == "team" else "single"
+        raw_leads = item.get("lead_professions")
+        lead_professions = (
+            tuple(
+                dict.fromkeys(
+                    profession.strip()
+                    for profession in raw_leads
+                    if isinstance(profession, str) and profession.strip()
+                )
+            )
+            if isinstance(raw_leads, list)
+            else ()
+        )
         requirements = _staffing_requirements(item.get("staffing_requirements"))
-        if delivery_shape == "team" and not requirements:
+        if delivery_shape == "team" and (not requirements or not lead_professions):
             delivery_shape = "single"
         goals.append(
             {
@@ -189,6 +233,7 @@ def _parse_goals(text: str) -> list[dict[str, Any]]:
                 "rationale": _opt_str(item.get("rationale")) or "",
                 "score": _clamp_score(item.get("score")),
                 "delivery_shape": delivery_shape,
+                "lead_professions": lead_professions if delivery_shape == "team" else (),
                 "staffing_requirements": requirements if delivery_shape == "team" else (),
             }
         )

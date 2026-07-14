@@ -39,6 +39,7 @@ class StrategyRecord:
     task_outcome_revisions: dict[str, int] = field(default_factory=dict)
     outcome_event_ids: list[str] = field(default_factory=list)
     delivery_shape: str = "single"
+    lead_professions: tuple[str, ...] = ()
     staffing_requirements: tuple[StaffingRequirement, ...] = ()
     passes: int = 0  # landed DoD passes (drift input)
     fails: int = 0  # landed DoD fails (drift input)

@@ -58,6 +58,7 @@ class DelegatedSubmitter:
                 goal_id=goal.id,
                 priority=self._policy.priority_for(record.score),
                 requirements=record.staffing_requirements,
+                lead_professions=record.lead_professions,
                 origin_fingerprint=fingerprint(goal.id, goal.title),
             )
         )

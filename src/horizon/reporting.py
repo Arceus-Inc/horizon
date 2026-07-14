@@ -228,6 +228,7 @@ def direction_from_records(
                     lead_id=record.lead_id,
                     task_outcomes=dict(record.task_outcomes),
                     delivery_shape=record.delivery_shape,
+                    lead_professions=record.lead_professions,
                     staffing_requirements=record.staffing_requirements,
                     effective_score=record.score,
                     effective_priority=ScorePolicy().priority_for(record.score),

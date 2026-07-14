@@ -38,6 +38,7 @@ class StrategyStore:
 
 def _record_from_raw(raw: dict[str, Any]) -> StrategyRecord:
     data = dict(raw)
+    data["lead_professions"] = tuple(data.get("lead_professions", ()))
     data["staffing_requirements"] = tuple(
         requirement
         if isinstance(requirement, StaffingRequirement)

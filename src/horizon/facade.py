@@ -422,6 +422,7 @@ class Horizon:
             lead_id=record.lead_id if record else None,
             task_outcomes=dict(record.task_outcomes) if record else {},
             delivery_shape=record.delivery_shape if record else "single",
+            lead_professions=record.lead_professions if record else (),
             staffing_requirements=record.staffing_requirements if record else (),
             effective_score=effective.score if effective else None,
             effective_priority=effective.priority if effective else None,

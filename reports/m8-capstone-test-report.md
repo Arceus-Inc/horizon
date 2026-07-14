@@ -2,6 +2,10 @@
 
 _Acceptance completed 2026-07-13_
 
+For the decision-by-decision operating narrative - staffing, task assignment, information flow, beat
+triggers, parent wake-up, and closure gates - see
+[M8 Operational Decision Report](m8-operational-decision-report.md).
+
 ## Verdict
 
 **PASS for the M8 acceptance surface.** The deterministic capstone completed a nested, specialist-led

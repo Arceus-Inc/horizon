@@ -34,6 +34,7 @@ class Goal:
     lead_id: str | None = None
     task_outcomes: dict[str, str] = field(default_factory=dict)
     delivery_shape: str = "single"
+    lead_professions: tuple[str, ...] = ()
     staffing_requirements: tuple[StaffingRequirement, ...] = ()
     effective_score: float | None = None
     effective_priority: str | None = None

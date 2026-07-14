@@ -53,6 +53,7 @@ class HorizonGovernance:
                     lead_id=g.lead_id,
                     task_outcomes=dict(g.task_outcomes),
                     delivery_shape=g.delivery_shape,
+                    lead_professions=g.lead_professions,
                     staffing_requirements=g.staffing_requirements,
                     effective_score=g.effective_score,
                     effective_priority=g.effective_priority,

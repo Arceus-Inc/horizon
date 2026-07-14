@@ -244,9 +244,20 @@ def test_decompose_persists_team_shape_and_staffing_requirements(tmp_path):
                     "rationale": "requires coordinated disciplines",
                     "score": 0.9,
                     "delivery_shape": "team",
+                    "lead_professions": ["ceo"],
                     "staffing_requirements": [
-                        {"profession": "engineer", "count": 2},
-                        {"profession": "designer", "count": 1},
+                        {
+                            "profession": "frontend_engineer",
+                            "count": 1,
+                            "coverage": "subtree",
+                            "outcome_area": "engineering",
+                        },
+                        {
+                            "profession": "designer",
+                            "count": 1,
+                            "coverage": "subtree",
+                            "outcome_area": "product",
+                        },
                     ],
                 }
             ]
@@ -260,19 +271,39 @@ def test_decompose_persists_team_shape_and_staffing_requirements(tmp_path):
 
     assert record is not None and (
         goal.delivery_shape,
+        goal.lead_professions,
         goal.staffing_requirements,
         record.delivery_shape,
+        record.lead_professions,
         record.staffing_requirements,
     ) == (
         "team",
+        ("ceo",),
         (
-            StaffingRequirement(profession="engineer", count=2),
-            StaffingRequirement(profession="designer"),
+            StaffingRequirement(
+                profession="frontend_engineer",
+                coverage="subtree",
+                outcome_area="engineering",
+            ),
+            StaffingRequirement(
+                profession="designer",
+                coverage="subtree",
+                outcome_area="product",
+            ),
         ),
         "team",
+        ("ceo",),
         (
-            StaffingRequirement(profession="engineer", count=2),
-            StaffingRequirement(profession="designer"),
+            StaffingRequirement(
+                profession="frontend_engineer",
+                coverage="subtree",
+                outcome_area="engineering",
+            ),
+            StaffingRequirement(
+                profession="designer",
+                coverage="subtree",
+                outcome_area="product",
+            ),
         ),
     )
 

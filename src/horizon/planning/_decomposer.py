@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from dream.contracts import StaffingRequirement
+
 from horizon._jsonio import extract_json
 from horizon.errors import DecompositionError, UnknownDecision
 from horizon.model import Decision, Goal
@@ -29,13 +31,15 @@ independently-executable GOALS. If every goal is completed, the decision is achi
 
 Rules:
 - Produce 2 to 6 goals; fewer is better for a small decision.
-- Each goal is ONE deliverable a single engineer can complete whole (never a whole team's worth).
+- Each goal is ONE deliverable. Use `single` when one specialist can complete it whole; use `team`
+    only when coordinated professions are required.
 - Titles are concrete and imperative ("Build the note-capture REST API", not "Backend work").
 - For each goal give: `metric` (how we know it is done), `target` (the concrete bar), a short
-  `rationale`, and a `score` in [0,1] for relative priority (1 = do first).
+    `rationale`, a `score` in [0,1], `delivery_shape` (`single` or `team`), and
+    `staffing_requirements` (`[]` for single; profession/count objects for team).
 - Order goals by score, highest first.
 - Output STRICT JSON only — no prose, no code fences — matching exactly:
-  {"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0}]}
+    {"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0, "delivery_shape": "single", "staffing_requirements": []}]}
 
 DECISION:
 __STATEMENT__
@@ -48,7 +52,7 @@ _CONTEXT_BLOCK = (
 )
 _RETRY_SUFFIX = (
     "\n\nIMPORTANT: your previous reply could not be parsed. Reply with STRICT JSON ONLY — exactly "
-    '{"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0}]} '
+    '{"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0, "delivery_shape": "single", "staffing_requirements": []}]} '
     "— no prose, no markdown, no code fences."
 )
 
@@ -69,13 +73,34 @@ _RESPONSE_FORMAT: dict[str, Any] = {
                     "items": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["title", "metric", "target", "rationale", "score"],
+                        "required": [
+                            "title",
+                            "metric",
+                            "target",
+                            "rationale",
+                            "score",
+                            "delivery_shape",
+                            "staffing_requirements",
+                        ],
                         "properties": {
                             "title": {"type": "string"},
                             "metric": {"type": "string"},
                             "target": {"type": "string"},
                             "rationale": {"type": "string"},
                             "score": {"type": "number"},
+                            "delivery_shape": {"type": "string", "enum": ["single", "team"]},
+                            "staffing_requirements": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "required": ["profession", "count"],
+                                    "properties": {
+                                        "profession": {"type": "string"},
+                                        "count": {"type": "integer", "minimum": 1},
+                                    },
+                                },
+                            },
                         },
                     },
                 }
@@ -112,6 +137,21 @@ def _clamp_score(value: object) -> float:
     return 0.5
 
 
+def _staffing_requirements(value: object) -> tuple[StaffingRequirement, ...]:
+    if not isinstance(value, list):
+        return ()
+    requirements: list[StaffingRequirement] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        profession = str(item.get("profession", "")).strip()
+        count = item.get("count", 1)
+        if not profession or isinstance(count, bool) or not isinstance(count, int) or count < 1:
+            continue
+        requirements.append(StaffingRequirement(profession=profession, count=count))
+    return tuple(requirements)
+
+
 def _parse_goals(text: str) -> list[dict[str, Any]]:
     try:
         data = json.loads(extract_json(text))
@@ -137,6 +177,10 @@ def _parse_goals(text: str) -> list[dict[str, Any]]:
         if key in seen:
             continue
         seen.add(key)
+        delivery_shape = "team" if item.get("delivery_shape") == "team" else "single"
+        requirements = _staffing_requirements(item.get("staffing_requirements"))
+        if delivery_shape == "team" and not requirements:
+            delivery_shape = "single"
         goals.append(
             {
                 "title": title,
@@ -144,6 +188,8 @@ def _parse_goals(text: str) -> list[dict[str, Any]]:
                 "target": _opt_str(item.get("target")),
                 "rationale": _opt_str(item.get("rationale")) or "",
                 "score": _clamp_score(item.get("score")),
+                "delivery_shape": delivery_shape,
+                "staffing_requirements": requirements if delivery_shape == "team" else (),
             }
         )
     if not goals:

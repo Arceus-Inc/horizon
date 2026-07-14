@@ -35,25 +35,51 @@ def test_top_level_surface_is_pinned():
 
 def test_ports_surface_is_pinned():
     assert _all(ports) == {
+        "CapacityPort",
+        "DelegatedIntakePort",
+        "DelegatedWorkRef",
+        "DelegatedWorkRequest",
         "GoalNode",
         "GoalStore",
         "IntakePort",
         "OutcomeEvent",
         "OutcomeFeed",
         "Priority",
+        "ProfessionCapacity",
+        "StaffingBlocked",
+        "StaffingRequirement",
     }
 
 
 def test_planning_surface_is_pinned():
-    assert _all(planning) == {"CompletionResult", "Decomposer", "Reasoner"}
+    assert _all(planning) == {
+        "CompletionResult",
+        "Decomposer",
+        "EffectivePriorityPolicy",
+        "EffectiveResult",
+        "Reasoner",
+    }
 
 
 def test_intake_surface_is_pinned():
-    assert _all(intake) == {"Prioritiser", "ScorePolicy", "Submitter", "fingerprint", "normalize_intent"}
+    assert _all(intake) == {
+        "DelegatedSubmitter",
+        "Prioritiser",
+        "ScorePolicy",
+        "Submitter",
+        "fingerprint",
+        "normalize_intent",
+    }
 
 
 def test_feedback_surface_is_pinned():
-    assert _all(feedback) == {"HealthPolicy", "OutcomeListener", "apply_outcome", "staleness_health"}
+    assert _all(feedback) == {
+        "HealthPolicy",
+        "OutcomeFold",
+        "OutcomeListener",
+        "apply_outcome",
+        "staleness_health",
+    }
 
 
 def test_model_surface_is_pinned():

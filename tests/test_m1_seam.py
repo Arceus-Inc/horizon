@@ -14,6 +14,8 @@ import dream
 import pytest
 from chorus.events import Event, EventKind
 from chorus.facade import Chorus
+from chorus.ledger import ExecutionMode, Task, TaskStatus
+from chorus.observability import EventBus
 from dream.contracts import GoalNode, GoalStore, IntakePort, OutcomeEvent, OutcomeFeed
 from examples.chorus_bridge import ChorusGoalStore, ChorusIntakePort, ChorusOutcomeFeed
 
@@ -111,3 +113,53 @@ def test_outcome_feed_translates_events(chorus):
     assert outcome.goal_id == "g_leaf"
     assert outcome.status == "done"
     assert outcome.passed is True
+
+
+def test_outcome_feed_preserves_hierarchy_and_replay_identity(chorus, tmp_path):
+    chorus._event_bus = EventBus(log_path=tmp_path / "events.jsonl")
+    store = ChorusGoalStore(chorus)
+    store.upsert(GoalNode(id="g_team", title="ship together", level="goal"))
+    chorus._ledger.tasks.submit(
+        Task(
+            id="root-team",
+            intent="ship together",
+            goal_id="g_team",
+            status=TaskStatus.TODO,
+            execution_mode=ExecutionMode.DELEGATION,
+            team_id="team-1",
+        )
+    )
+    chorus._ledger.tasks.submit(
+        Task(
+            id="child-team",
+            intent="build one area",
+            goal_id="g_team",
+            parent_id="root-team",
+            depth=1,
+            status=TaskStatus.DONE,
+            execution_mode=ExecutionMode.DELIVERY,
+            team_id="team-1",
+        )
+    )
+    at = datetime(2026, 7, 14, 9, 30, tzinfo=UTC)
+    chorus._event_bus.emit(
+        Event(
+            kind=EventKind.RUN_EVALUATED,
+            at=at,
+            trace_id="trace-1",
+            task_id="child-team",
+            run_id="run-1",
+            payload={"passed": True},
+        )
+    )
+
+    replayed = list(ChorusOutcomeFeed(chorus).replay())[-1]
+
+    assert replayed.parent_task_id == "root-team"
+    assert replayed.root_task_id == "root-team"
+    assert replayed.team_id == "team-1"
+    assert replayed.execution_mode == "delivery"
+    assert replayed.is_root_outcome is False
+    assert replayed.event_id is not None
+    assert replayed.task_revision == int(at.timestamp() * 1_000_000)
+    assert list(ChorusOutcomeFeed(chorus).replay())[-1].event_id == replayed.event_id

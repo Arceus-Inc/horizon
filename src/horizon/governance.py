@@ -47,6 +47,16 @@ class HorizonGovernance:
                     task_id=g.task_id,
                     metric=g.metric,
                     target=g.target,
+                    root_task_id=g.root_task_id,
+                    task_ids=tuple(g.task_ids),
+                    team_id=g.team_id,
+                    lead_id=g.lead_id,
+                    task_outcomes=dict(g.task_outcomes),
+                    delivery_shape=g.delivery_shape,
+                    staffing_requirements=g.staffing_requirements,
+                    effective_score=g.effective_score,
+                    effective_priority=g.effective_priority,
+                    priority_reason=g.priority_reason,
                 )
                 for g in sorted(st.goals, key=lambda g: g.score, reverse=True)
             )

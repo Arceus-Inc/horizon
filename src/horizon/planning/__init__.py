@@ -11,6 +11,13 @@ Lands in M2: ``_decomposer.py``.
 from __future__ import annotations
 
 from horizon.planning._decomposer import Decomposer
+from horizon.planning._effective_priority import EffectivePriorityPolicy, EffectiveResult
 from horizon.planning._reasoner import CompletionResult, Reasoner
 
-__all__ = ["CompletionResult", "Decomposer", "Reasoner"]
+__all__ = [
+	"CompletionResult",
+	"Decomposer",
+	"EffectivePriorityPolicy",
+	"EffectiveResult",
+	"Reasoner",
+]

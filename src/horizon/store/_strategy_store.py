@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
+
+from dream.contracts import StaffingRequirement
 
 from horizon.model._strategy import StrategyRecord
 from horizon.store._jsonfile import read_json, write_json
@@ -21,7 +24,7 @@ class StrategyStore:
 
     def get(self, goal_id: str) -> StrategyRecord | None:
         raw = read_json(self._path).get(goal_id)
-        return StrategyRecord(**raw) if raw is not None else None
+        return _record_from_raw(raw) if raw is not None else None
 
     def put(self, record: StrategyRecord) -> StrategyRecord:
         data = read_json(self._path)
@@ -30,4 +33,15 @@ class StrategyStore:
         return record
 
     def all(self) -> list[StrategyRecord]:
-        return [StrategyRecord(**raw) for raw in read_json(self._path).values()]
+        return [_record_from_raw(raw) for raw in read_json(self._path).values()]
+
+
+def _record_from_raw(raw: dict[str, Any]) -> StrategyRecord:
+    data = dict(raw)
+    data["staffing_requirements"] = tuple(
+        requirement
+        if isinstance(requirement, StaffingRequirement)
+        else StaffingRequirement(**requirement)
+        for requirement in data.get("staffing_requirements", ())
+    )
+    return StrategyRecord(**data)

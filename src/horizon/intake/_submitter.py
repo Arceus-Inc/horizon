@@ -42,8 +42,8 @@ class Submitter:
             target=goal.target,
             decision_id=goal.decision_id,
         )
-        if record.task_id is not None:
-            return record.task_id  # already submitted — do not open a second task
+        if record.root_task_id is not None:
+            return record.root_task_id  # already submitted — do not open a second task
 
         assignee = goal.owner or self._default_assignee
         priority = self._policy.priority_for(record.score)
@@ -55,6 +55,8 @@ class Submitter:
             origin_fingerprint=fingerprint(goal.id, goal.title),
         )
         record.task_id = task_id
+        record.root_task_id = task_id
+        record.task_ids = list(dict.fromkeys([*record.task_ids, task_id]))
         record.attempts += 1
         self._strategy.put(record)
         return task_id

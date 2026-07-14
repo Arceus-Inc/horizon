@@ -160,7 +160,7 @@ class LoopReporter:
 
 
 def render_direction(states: list[DecisionState]) -> str:
-    """Render the current direction tree (decisions → goals with score/health/priority/task)."""
+    """Render direction with raw/effective priority and execution attribution."""
     policy = ScorePolicy()
     lines = ["## Current direction (read model)"]
     if not states:
@@ -171,15 +171,31 @@ def render_direction(states: list[DecisionState]) -> str:
         if not state.goals:
             lines.append("\n_(no goals yet)_")
             continue
-        lines.append("\n| score | priority | health | goal | task |")
-        lines.append("|-------|----------|--------|------|------|")
+        lines.append("\n| raw -> effective | priority | health | goal | execution | reason |")
+        lines.append("|------------------|----------|--------|------|-----------|--------|")
         for goal in sorted(state.goals, key=lambda g: g.score, reverse=True):
-            priority = policy.priority_for(goal.score)
-            task = f"`{goal.task_id}`" if goal.task_id else "—"
+            effective_score = goal.effective_score if goal.effective_score is not None else goal.score
+            priority = goal.effective_priority or policy.priority_for(effective_score)
+            execution = _execution_summary(goal)
             lines.append(
-                f"| {goal.score:.2f} | {priority} | {goal.health} | {_fmt(goal.title)} | {task} |"
+                f"| {goal.score:.2f} -> {effective_score:.2f} | {priority} | {goal.health} | "
+                f"{_fmt(goal.title)} | {execution} | {_fmt(goal.priority_reason)} |"
             )
     return "\n".join(lines)
+
+
+def _execution_summary(goal: Goal) -> str:
+    root = goal.root_task_id or goal.task_id
+    parts = [goal.delivery_shape]
+    if root:
+        parts.append(f"root `{root}`")
+    if goal.team_id:
+        parts.append(f"team `{goal.team_id}`")
+    if goal.lead_id:
+        parts.append(f"lead `{goal.lead_id}`")
+    if goal.task_ids:
+        parts.append(f"{len(goal.task_ids)} tasks")
+    return "; ".join(parts)
 
 
 def direction_from_records(
@@ -206,6 +222,16 @@ def direction_from_records(
                     target=record.target,
                     evidence=list(record.evidence),
                     task_id=record.task_id,
+                    root_task_id=record.root_task_id,
+                    task_ids=list(record.task_ids),
+                    team_id=record.team_id,
+                    lead_id=record.lead_id,
+                    task_outcomes=dict(record.task_outcomes),
+                    delivery_shape=record.delivery_shape,
+                    staffing_requirements=record.staffing_requirements,
+                    effective_score=record.score,
+                    effective_priority=ScorePolicy().priority_for(record.score),
+                    priority_reason="capacity snapshot unavailable; raw score used",
                 )
             )
         states.append(DecisionState(decision=decision, goals=goals))

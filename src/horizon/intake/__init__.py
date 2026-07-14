@@ -10,11 +10,13 @@ Lands in M2: ``_submitter.py``, ``_prioritiser.py``, ``_fingerprint.py``.
 
 from __future__ import annotations
 
+from horizon.intake._delegated import DelegatedSubmitter
 from horizon.intake._fingerprint import fingerprint, normalize_intent
 from horizon.intake._prioritiser import Prioritiser, ScorePolicy
 from horizon.intake._submitter import Submitter
 
 __all__ = [
+    "DelegatedSubmitter",
     "Prioritiser",
     "ScorePolicy",
     "Submitter",

@@ -146,7 +146,7 @@ class Horizon:
         return self._decomposer.decompose(decision_id)
 
     def submit_goal(self, goal: Goal) -> str | StaffingBlocked:
-        """Submit one leaf goal to chorus (idempotent); returns the task id."""
+        """Submit one leaf goal to chorus (idempotent); returns the task id or a StaffingBlocked result."""
         return self._submit_goal(goal)
 
     def submit_decision(self, decision_id: str) -> list[str | StaffingBlocked]:

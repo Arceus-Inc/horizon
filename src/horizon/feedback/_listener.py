@@ -122,7 +122,8 @@ class OutcomeListener:
             record.needs_recovery = False
             record.last_diagnostic = ""
         self._strategy.put(record)
-        self.handled += 1
+        if event.kind in _VERDICT_KINDS and event.passed is not None:
+            self.handled += 1
         if record.root_task_id is not None:
             self._prioritiser.apply(record.root_task_id, record.score)
         if self._observer is not None:

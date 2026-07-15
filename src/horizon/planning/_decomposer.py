@@ -29,10 +29,16 @@ _PROMPT = """You are the strategy decomposer for an autonomous software company.
 A DECISION is a high-level strategic intent. Break it into a small set of concrete,
 independently-executable GOALS. If every goal is completed, the decision is achieved.
 
+A modern coding harness is powerful: ONE goal is a big chunk of work — a whole module or a whole
+feature, built end to end WITH its own tests in a single execution. Bias hard toward few, large,
+outcome-shaped goals. Do NOT split one module or feature into per-function, per-file, or per-layer
+goals; that is over-decomposition and it is wrong.
+
 Rules:
-- Produce 2 to 6 goals; fewer is better for a small decision.
-- Each goal is ONE deliverable. Use `single` when one specialist can complete it whole; use `team`
-    only when coordinated professions are required.
+- Produce 1 to 4 goals; fewer is better. A single-module or single-feature decision is ONE goal.
+- Each goal is ONE self-contained deliverable one owner (or one small team) builds whole, with its
+    own tests. Use `single` when one specialist can complete it; use `team` ONLY when the goal
+    genuinely spans multiple professions/outcome areas that must be coordinated.
 - Titles are concrete and imperative ("Build the note-capture REST API", not "Backend work").
 - For each goal give: `metric` (how we know it is done), `target` (the concrete bar), a short
     `rationale`, a `score` in [0,1], `delivery_shape` (`single` or `team`),
@@ -51,7 +57,7 @@ DECISION:
 __STATEMENT__
 """
 
-_MAX_GOALS = 12  # a defensive cap; the prompt asks for 2-6
+_MAX_GOALS = 12  # a defensive cap; the prompt asks for 1-4 (bias toward few, big-chunk goals)
 _CONTEXT_BLOCK = (
     "\n\nAVAILABLE CONTEXT (the resources / data / constraints the team actually has — only propose "
     "goals achievable with these; do not invent data sources that are not listed):\n__CONTEXT__\n"
@@ -276,7 +282,9 @@ class Decomposer:
         if self._model is not None:
             params["model"] = self._model
         if self._structured:
-            params["response_format"] = _RESPONSE_FORMAT  # typed output, enforced at the API boundary
+            params["response_format"] = (
+                _RESPONSE_FORMAT  # typed output, enforced at the API boundary
+            )
         prompt = _build_prompt(decision, self._context)
         result = self._reasoner.complete(prompt, params)
         try:

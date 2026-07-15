@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from dream.contracts import StaffingRequirement
+
 from horizon._jsonio import extract_json
 from horizon.errors import DecompositionError, UnknownDecision
 from horizon.model import Decision, Goal
@@ -27,28 +29,42 @@ _PROMPT = """You are the strategy decomposer for an autonomous software company.
 A DECISION is a high-level strategic intent. Break it into a small set of concrete,
 independently-executable GOALS. If every goal is completed, the decision is achieved.
 
+A modern coding harness is powerful: ONE goal is a big chunk of work — a whole module or a whole
+feature, built end to end WITH its own tests in a single execution. Bias hard toward few, large,
+outcome-shaped goals. Do NOT split one module or feature into per-function, per-file, or per-layer
+goals; that is over-decomposition and it is wrong.
+
 Rules:
-- Produce 2 to 6 goals; fewer is better for a small decision.
-- Each goal is ONE deliverable a single engineer can complete whole (never a whole team's worth).
+- Produce 1 to 4 goals; fewer is better. A single-module or single-feature decision is ONE goal.
+- Each goal is ONE self-contained deliverable one owner (or one small team) builds whole, with its
+    own tests. Use `single` when one specialist can complete it; use `team` ONLY when the goal
+    genuinely spans multiple professions/outcome areas that must be coordinated.
 - Titles are concrete and imperative ("Build the note-capture REST API", not "Backend work").
 - For each goal give: `metric` (how we know it is done), `target` (the concrete bar), a short
-  `rationale`, and a `score` in [0,1] for relative priority (1 = do first).
+    `rationale`, a `score` in [0,1], `delivery_shape` (`single` or `team`),
+    `lead_professions` (`[]` for single; allowed functional owner professions for team), and
+    `staffing_requirements` (`[]` for single; profession/count/coverage/outcome_area objects for team).
+- Prefer outcome-area goals owned by a functional lead. Use `coverage: "direct"` when specialists are
+    that lead's direct reports. Use `coverage: "subtree"` only for a cross-functional root whose leaf
+    professions are covered through bounded functional branches; group those leaves by `outcome_area`.
+- The permanent hierarchy is at most CEO -> functional lead -> specialist. Do not emit generic
+    engineer, manager, or reviewer professions.
 - Order goals by score, highest first.
 - Output STRICT JSON only — no prose, no code fences — matching exactly:
-  {"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0}]}
+    {"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0, "delivery_shape": "single", "lead_professions": [], "staffing_requirements": []}]}
 
 DECISION:
 __STATEMENT__
 """
 
-_MAX_GOALS = 12  # a defensive cap; the prompt asks for 2-6
+_MAX_GOALS = 12  # a defensive cap; the prompt asks for 1-4 (bias toward few, big-chunk goals)
 _CONTEXT_BLOCK = (
     "\n\nAVAILABLE CONTEXT (the resources / data / constraints the team actually has — only propose "
     "goals achievable with these; do not invent data sources that are not listed):\n__CONTEXT__\n"
 )
 _RETRY_SUFFIX = (
     "\n\nIMPORTANT: your previous reply could not be parsed. Reply with STRICT JSON ONLY — exactly "
-    '{"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0}]} '
+    '{"goals": [{"title": "...", "metric": "...", "target": "...", "rationale": "...", "score": 0.0, "delivery_shape": "single", "lead_professions": [], "staffing_requirements": []}]} '
     "— no prose, no markdown, no code fences."
 )
 
@@ -69,13 +85,49 @@ _RESPONSE_FORMAT: dict[str, Any] = {
                     "items": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["title", "metric", "target", "rationale", "score"],
+                        "required": [
+                            "title",
+                            "metric",
+                            "target",
+                            "rationale",
+                            "score",
+                            "delivery_shape",
+                            "lead_professions",
+                            "staffing_requirements",
+                        ],
                         "properties": {
                             "title": {"type": "string"},
                             "metric": {"type": "string"},
                             "target": {"type": "string"},
                             "rationale": {"type": "string"},
                             "score": {"type": "number"},
+                            "delivery_shape": {"type": "string", "enum": ["single", "team"]},
+                            "lead_professions": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "staffing_requirements": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "required": [
+                                        "profession",
+                                        "count",
+                                        "coverage",
+                                        "outcome_area",
+                                    ],
+                                    "properties": {
+                                        "profession": {"type": "string"},
+                                        "count": {"type": "integer", "minimum": 1},
+                                        "coverage": {
+                                            "type": "string",
+                                            "enum": ["direct", "subtree"],
+                                        },
+                                        "outcome_area": {"type": ["string", "null"]},
+                                    },
+                                },
+                            },
                         },
                     },
                 }
@@ -112,6 +164,32 @@ def _clamp_score(value: object) -> float:
     return 0.5
 
 
+def _staffing_requirements(value: object) -> tuple[StaffingRequirement, ...]:
+    if not isinstance(value, list):
+        return ()
+    requirements: list[StaffingRequirement] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        profession = str(item.get("profession", "")).strip()
+        count = item.get("count", 1)
+        coverage = item.get("coverage", "direct")
+        outcome_area = _opt_str(item.get("outcome_area"))
+        if not profession or isinstance(count, bool) or not isinstance(count, int) or count < 1:
+            continue
+        if coverage not in {"direct", "subtree"}:
+            continue
+        requirements.append(
+            StaffingRequirement(
+                profession=profession,
+                count=count,
+                coverage=coverage,
+                outcome_area=outcome_area,
+            )
+        )
+    return tuple(requirements)
+
+
 def _parse_goals(text: str) -> list[dict[str, Any]]:
     try:
         data = json.loads(extract_json(text))
@@ -137,6 +215,22 @@ def _parse_goals(text: str) -> list[dict[str, Any]]:
         if key in seen:
             continue
         seen.add(key)
+        delivery_shape = "team" if item.get("delivery_shape") == "team" else "single"
+        raw_leads = item.get("lead_professions")
+        lead_professions = (
+            tuple(
+                dict.fromkeys(
+                    profession.strip()
+                    for profession in raw_leads
+                    if isinstance(profession, str) and profession.strip()
+                )
+            )
+            if isinstance(raw_leads, list)
+            else ()
+        )
+        requirements = _staffing_requirements(item.get("staffing_requirements"))
+        if delivery_shape == "team" and (not requirements or not lead_professions):
+            delivery_shape = "single"
         goals.append(
             {
                 "title": title,
@@ -144,6 +238,9 @@ def _parse_goals(text: str) -> list[dict[str, Any]]:
                 "target": _opt_str(item.get("target")),
                 "rationale": _opt_str(item.get("rationale")) or "",
                 "score": _clamp_score(item.get("score")),
+                "delivery_shape": delivery_shape,
+                "lead_professions": lead_professions if delivery_shape == "team" else (),
+                "staffing_requirements": requirements if delivery_shape == "team" else (),
             }
         )
     if not goals:
@@ -185,7 +282,9 @@ class Decomposer:
         if self._model is not None:
             params["model"] = self._model
         if self._structured:
-            params["response_format"] = _RESPONSE_FORMAT  # typed output, enforced at the API boundary
+            params["response_format"] = (
+                _RESPONSE_FORMAT  # typed output, enforced at the API boundary
+            )
         prompt = _build_prompt(decision, self._context)
         result = self._reasoner.complete(prompt, params)
         try:

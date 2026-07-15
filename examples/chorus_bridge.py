@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime
+from hashlib import sha256
 
 from chorus.events import Event, EventKind
 from chorus.facade import Chorus
@@ -162,9 +163,24 @@ class ChorusOutcomeFeed:
         if kind is None:
             return None  # not an outcome horizon reacts to — drop it
         goal_id: str | None = None
+        parent_task_id: str | None = None
+        root_task_id: str | None = None
+        team_id: str | None = None
+        execution_mode: str | None = None
         if event.task_id is not None:
             task = self._chorus._ledger.tasks.get(event.task_id)
-            goal_id = task.goal_id if task is not None else None
+            if task is not None:
+                goal_id = task.goal_id
+                parent_task_id = task.parent_id
+                team_id = task.team_id
+                execution_mode = task.execution_mode.value
+                root = task
+                while root.parent_id is not None:
+                    parent = self._chorus._ledger.tasks.get(root.parent_id)
+                    if parent is None:
+                        break
+                    root = parent
+                root_task_id = root.id
         payload = event.payload
         status = payload.get("status")
         passed = payload.get("passed")
@@ -176,6 +192,20 @@ class ChorusOutcomeFeed:
                 passed = True
             elif outcome == "fail":
                 passed = False
+        event_identity = json.dumps(
+            {
+                "kind": event.kind.value,
+                "at": event.at.isoformat(),
+                "trace_id": event.trace_id,
+                "task_id": event.task_id,
+                "employee_id": event.employee_id,
+                "run_id": event.run_id,
+                "payload": dict(event.payload),
+            },
+            sort_keys=True,
+            default=str,
+            separators=(",", ":"),
+        )
         return OutcomeEvent(
             kind=kind,
             task_id=event.task_id,
@@ -183,4 +213,11 @@ class ChorusOutcomeFeed:
             status=str(status) if status is not None else None,
             passed=bool(passed) if passed is not None else None,
             detail=json.dumps(dict(payload), sort_keys=True, default=str),
+            parent_task_id=parent_task_id,
+            root_task_id=root_task_id,
+            team_id=team_id,
+            execution_mode=execution_mode,
+            is_root_outcome=event.task_id is not None and event.task_id == root_task_id,
+            event_id=sha256(event_identity.encode("utf-8")).hexdigest(),
+            task_revision=int(event.at.timestamp() * 1_000_000),
         )

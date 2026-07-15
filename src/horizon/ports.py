@@ -8,19 +8,33 @@ Re-exported here so horizon code + tests import the seam from one place (``horiz
 from __future__ import annotations
 
 from dream.contracts import (
+    CapacityPort,
+    DelegatedIntakePort,
+    DelegatedWorkRef,
+    DelegatedWorkRequest,
     GoalNode,
     GoalStore,
     IntakePort,
     OutcomeEvent,
     OutcomeFeed,
     Priority,
+    ProfessionCapacity,
+    StaffingBlocked,
+    StaffingRequirement,
 )
 
 __all__ = [
+    "CapacityPort",
+    "DelegatedIntakePort",
+    "DelegatedWorkRef",
+    "DelegatedWorkRequest",
     "GoalNode",
     "GoalStore",
     "IntakePort",
     "OutcomeEvent",
     "OutcomeFeed",
     "Priority",
+    "ProfessionCapacity",
+    "StaffingBlocked",
+    "StaffingRequirement",
 ]

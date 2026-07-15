@@ -42,7 +42,7 @@ cross-repo push), and C/D are the original M4/M5 that assume A/B exist.
 
 ```
 A. Deepen the loop      (make outcomes mean more)      — mostly in-repo
-B. Widen the loop       (portfolio + team)             — one cross-repo push (the manager)
+B. Widen the loop       (portfolio + team)             — one cross-repo push (management)
 C. Originate direction  (M4 generation funnel)         — evidence → proposed decisions
 D. Control surface      (M5 CEO chat)                  — human steering, confirm-to-write
 X. Cross-cutting        (observability + self-eval)    — runs alongside all of the above
@@ -120,23 +120,28 @@ rarely: sometimes the goals are fine and the *decision* is wrong.
 
 v1 operates at **one decision, one employee, leaf-goal = one task**. Theme B lifts all three limits.
 
-### B1 · Goal → multi-task splitting (the "manager") — *the big one*
-**What.** Introduce the **manager** that splits a leaf goal into multiple dependent tasks
-(`backend / frontend / design`) assigned across employees — the piece v1 explicitly deferred.
+### B1 · Management, hierarchy, and delegation — *the big one*
+**What.** Let a management-capable **specialist lead** split a leaf goal into multiple dependent tasks
+(`backend / frontend / design`) assigned across a durable team. `manager` is not a separate profession:
+an engineer, designer, PM, or other specialist leads when an explicit management profile and a
+delegation-mode task authorize it. See [`specs/m8-management-hierarchy-delegation.md`](specs/m8-management-hierarchy-delegation.md).
 
 **Why.** The single-Analyst ceiling is the main thing between horizon and driving *real* org work. This is
 the structural unlock for everything team-shaped.
 
 **Scope (cross-repo).**
-- **chorus:** a manager that, given a `goal_id`, emits several linked `task` rows with dependencies (this is
-  chorus-side execution structure — horizon does not schedule).
+- **chorus:** human-governed line hierarchy + management profiles, durable teams, specialist lead
+  selection, and bounded direct-report delegation into linked task rows (execution structure stays
+  Chorus-owned — horizon does not schedule).
+- **dream:** additive delegated-intake, capacity-read, and hierarchical-outcome contracts.
 - **horizon:** the decomposer/submitter learn a **goal can fan out**; `StrategyRecord` tracks a goal with
   *many* task_ids; the listener folds a goal's health from *all* its tasks' verdicts (not one).
 - Health aggregation: a goal is `done` when its tasks' DoD are all passed; `blocked` if any hard-blocks.
 
 **Proves.** Horizon drives multi-person work, not a single Analyst.
 
-**Seam impact.** First real cross-repo push of v2 (chorus manager + a `GoalStore`/intake fan-out shape).
+**Seam impact.** First real cross-repo push of v2 (Chorus management/team execution + additive Dream
+ports + Horizon fan-out aggregation).
 Additive, matching the v1 seam discipline.
 
 ### B2 · Multi-decision portfolio
@@ -210,7 +215,7 @@ A human steers the whole thing — **read + propose, confirm-to-write** (no auto
 ### D3 · Approve the funnel + re-eval flags
 - The confirm surface is where C4's proposals and A3's `needs_review` flags get human sign-off.
 
-**Capstone.** signals → scout → brief → reconcile → CEO review → submit → (manager fan-out) → execute →
+**Capstone.** signals → scout → brief → reconcile → CEO review → submit → (specialist-led fan-out) → execute →
 metric-aware outcome → re-priority.
 
 ---
@@ -234,7 +239,7 @@ Runs alongside A–D; each item is small but compounding.
 |---|---|---|---|
 | **M6 — Deepen** | A1 metric-aware outcomes · A2 recovery escalation | no | v2 signal quality |
 | **M7 — Steer up** | A3 decision re-evaluation · B2 portfolio · X1 durable log | no | v2 breadth |
-| **M8 — The manager** | B1 goal → multi-task split · B3 capacity/budget priority | **yes** (chorus) | v2 team-scale |
+| **M8 — Management + hierarchy + delegation** | B1 specialist-led multi-task split · B3 capacity/budget priority | **yes** (dream + chorus) | v2 team-scale |
 | **M9 — Generation funnel** | C1–C4 (scouts + analyst → DirectionBrief → reconcile) | yes (analyst) | evidence-driven direction |
 | **M10 — CEO chat + capstone** | D1–D3 · X2 self-eval · X3 trends · capstone demo | yes | steerable, self-originating loop |
 
@@ -251,7 +256,7 @@ the loop we just proved into one that measures progress, and needs nothing outsi
 | Metric source (A1) | Analyst reports the metric in a **typed/structured block**; horizon reads it at fold time (no chorus change) |
 | Recovery levers (A2) | Ladder: retry → enrich brief → re-decompose → human; bounded, policy-driven |
 | Decision re-eval (A3) | **Flag only** (`needs_review`); acting on it is human (Theme D) |
-| The manager (B1) | Lives in **chorus** (execution structure); horizon only authors the goal + folds aggregated health |
+| Management (B1) | Lives in **chorus** as a composable profile on specialists; horizon only authors the goal + folds aggregated health |
 | Generation funnel (C) | **Proposal-only**, evidence-gated, reuses chorus's analyst — unchanged from v1-plan M4 |
 | CEO chat (D) | **Minimal**, read/explain + draft; **writes need confirm/approval** — unchanged from v1-plan M5 |
 | Invariants | All v1 §3 invariants hold; no sideways import; horizon never schedules |
@@ -268,5 +273,7 @@ the loop we just proved into one that measures progress, and needs nothing outsi
 - **Portfolio weighting (B2):** equal weight vs. per-decision weight. Default: per-decision weight, equal if
   unset.
 - **Capacity signal source (B3):** in-flight task count (default) vs. a richer chorus capacity API.
-- **Manager fan-out authorship (B1):** who names the sub-tasks — the manager (default) or a horizon hint on
-  the goal? Default: manager owns task shape; horizon owns the goal + its metric/target.
+- **Team lifetime (B1 / OD-1):** reusable standing squad vs. durable per-goal mission team. Both proposals
+  are specified in the M8 spec for cofounder review; the shared authority/delegation core is independent.
+- **Fan-out authorship (B1):** locked — the specialist lead owns task shape; horizon owns the goal,
+  requirements, metric, and target.

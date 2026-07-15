@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from dream.contracts import StaffingRequirement
+
 
 @dataclass
 class StrategyRecord:
@@ -29,6 +31,16 @@ class StrategyRecord:
     evidence: list[str] = field(default_factory=list)
     decision_id: str | None = None  # the horizon-only decision this goal decomposed from
     task_id: str | None = None  # the chorus task currently realizing this goal (set at submit)
+    root_task_id: str | None = None
+    task_ids: list[str] = field(default_factory=list)
+    team_id: str | None = None
+    lead_id: str | None = None
+    task_outcomes: dict[str, str] = field(default_factory=dict)
+    task_outcome_revisions: dict[str, int] = field(default_factory=dict)
+    outcome_event_ids: list[str] = field(default_factory=list)
+    delivery_shape: str = "single"
+    lead_professions: tuple[str, ...] = ()
+    staffing_requirements: tuple[StaffingRequirement, ...] = ()
     passes: int = 0  # landed DoD passes (drift input)
     fails: int = 0  # landed DoD fails (drift input)
     last_outcome_at: str | None = None  # ISO ts of the last landed outcome (staleness input)
@@ -36,4 +48,11 @@ class StrategyRecord:
     attempts: int = 0  # how many times this goal has been submitted (initial + recoveries)
     needs_recovery: bool = False  # a terminal failure landed; awaiting a diagnostic-carrying re-attempt
     last_diagnostic: str = ""  # why the last attempt failed — stored on the node, read into the next beat
+
+    def __post_init__(self) -> None:
+        """Keep the legacy task identity aligned with the authoritative root."""
+        if self.root_task_id is not None:
+            self.task_id = self.root_task_id
+        elif self.task_id is not None:
+            self.root_task_id = self.task_id
 

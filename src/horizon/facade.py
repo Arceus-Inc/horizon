@@ -31,15 +31,27 @@ from horizon.generation import (
     SourceAdapter,
     passes_evidence_gate,
 )
+from horizon.intake._delegated import DelegatedSubmitter
 from horizon.intake._fingerprint import fingerprint
 from horizon.intake._prioritiser import Prioritiser, ScorePolicy
 from horizon.intake._submitter import Submitter
-from horizon.model import Decision, Goal
+from horizon.model import Decision, Goal, StrategyRecord
 from horizon.model._state import DecisionState
 from horizon.planning._authoring import author_goals
 from horizon.planning._decomposer import Decomposer
+from horizon.planning._effective_priority import EffectivePriorityPolicy, EffectiveResult
 from horizon.planning._reasoner import Reasoner
-from horizon.ports import GoalNode, GoalStore, IntakePort, OutcomeEvent, OutcomeFeed
+from horizon.ports import (
+    CapacityPort,
+    DelegatedIntakePort,
+    DelegatedWorkRef,
+    GoalNode,
+    GoalStore,
+    IntakePort,
+    OutcomeEvent,
+    OutcomeFeed,
+    StaffingBlocked,
+)
 from horizon.store import DecisionStore, StrategyStore
 
 
@@ -51,12 +63,15 @@ class Horizon:
         *,
         goals: GoalStore,
         intake: IntakePort,
+        delegated_intake: DelegatedIntakePort | None = None,
+        capacity: CapacityPort | None = None,
         outcomes: OutcomeFeed,
         reasoner: Reasoner | None = None,
         decisions: DecisionStore | None = None,
         strategy: StrategyStore | None = None,
         default_assignee: str | None = None,
         score_policy: ScorePolicy | None = None,
+        effective_priority_policy: EffectivePriorityPolicy | None = None,
         health_policy: HealthPolicy | None = None,
         outcome_observer: Observer | None = None,
         model: str | None = None,
@@ -70,6 +85,10 @@ class Horizon:
         self._strategy = strategy or StrategyStore()
         self._proposals = proposals or ProposalStore()
         self._score_policy = score_policy or ScorePolicy()
+        self._capacity = capacity
+        self._effective_priority_policy = effective_priority_policy or EffectivePriorityPolicy(
+            score_policy=self._score_policy
+        )
         self._health_policy = health_policy or HealthPolicy()
         self._default_assignee = default_assignee
 
@@ -79,6 +98,15 @@ class Horizon:
             strategy=self._strategy,
             default_assignee=default_assignee,
             policy=self._score_policy,
+        )
+        self._delegated_submitter = (
+            DelegatedSubmitter(
+                intake=delegated_intake,
+                strategy=self._strategy,
+                policy=self._score_policy,
+            )
+            if delegated_intake is not None
+            else None
         )
         self._decomposer: Decomposer | None = (
             Decomposer(
@@ -117,21 +145,29 @@ class Horizon:
             raise HorizonError("Horizon was built without a reasoner; cannot decompose")
         return self._decomposer.decompose(decision_id)
 
-    def submit_goal(self, goal: Goal) -> str:
-        """Submit one leaf goal to chorus (idempotent); returns the task id."""
-        return self._submitter.submit(goal)
+    def submit_goal(self, goal: Goal) -> str | StaffingBlocked:
+        """Submit one leaf goal to chorus (idempotent); returns the task id or a StaffingBlocked result."""
+        return self._submit_goal(goal)
 
-    def submit_decision(self, decision_id: str) -> list[str]:
+    def submit_decision(self, decision_id: str) -> list[str | StaffingBlocked]:
         """Submit every goal of a decision to chorus; returns the task ids (order preserved)."""
         decision = self._decisions.get(decision_id)
         if decision is None:
             raise UnknownDecision(decision_id)
-        task_ids: list[str] = []
+        task_ids: list[str | StaffingBlocked] = []
         for goal_id in decision.goal_ids:
             goal = self.goal_view(goal_id)
             if goal is not None:
-                task_ids.append(self._submitter.submit(goal))
+                task_ids.append(self._submit_goal(goal))
         return task_ids
+
+    def _submit_goal(self, goal: Goal) -> str | StaffingBlocked:
+        if goal.delivery_shape != "team":
+            return self._submitter.submit(goal)
+        if self._delegated_submitter is None:
+            raise HorizonError("Horizon was built without delegated intake; cannot submit team goal")
+        result = self._delegated_submitter.submit(goal)
+        return result.root_task_id if isinstance(result, DelegatedWorkRef) else result
 
     # -- generation funnel (Theme C — evidence -> proposed decisions, human-gated) ------------
 
@@ -366,6 +402,7 @@ class Horizon:
         if node is None:
             return None
         record = self._strategy.get(goal_id)
+        effective = self._effective_priority(record) if record is not None else None
         return Goal(
             id=node.id,
             title=node.title,
@@ -379,6 +416,30 @@ class Horizon:
             target=record.target if record else None,
             evidence=list(record.evidence) if record else [],
             task_id=record.task_id if record else None,
+            root_task_id=record.root_task_id if record else None,
+            task_ids=list(record.task_ids) if record else [],
+            team_id=record.team_id if record else None,
+            lead_id=record.lead_id if record else None,
+            task_outcomes=dict(record.task_outcomes) if record else {},
+            delivery_shape=record.delivery_shape if record else "single",
+            lead_professions=record.lead_professions if record else (),
+            staffing_requirements=record.staffing_requirements if record else (),
+            effective_score=effective.score if effective else None,
+            effective_priority=effective.priority if effective else None,
+            priority_reason=effective.reason if effective else "",
+        )
+
+    def _effective_priority(self, record: StrategyRecord) -> EffectiveResult:
+        if self._capacity is None:
+            return EffectiveResult(
+                score=record.score,
+                priority=self._score_policy.priority_for(record.score),
+                reason="capacity snapshot unavailable; raw score used",
+            )
+        return self._effective_priority_policy.evaluate(
+            raw_score=record.score,
+            requirements=record.staffing_requirements,
+            capacities=self._capacity.snapshot(),
         )
 
     def state(self) -> list[DecisionState]:

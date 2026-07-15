@@ -51,6 +51,9 @@ def author_goals(
             target=spec.get("target"),
             evidence=[rationale] if rationale else [],
             decision_id=decision.id,
+            delivery_shape=spec.get("delivery_shape", "single"),
+            lead_professions=tuple(spec.get("lead_professions", ())),
+            staffing_requirements=tuple(spec.get("staffing_requirements", ())),
         )
         strategy.put(record)
         made.append(
@@ -64,6 +67,9 @@ def author_goals(
                 metric=record.metric,
                 target=record.target,
                 evidence=list(record.evidence),
+                delivery_shape=record.delivery_shape,
+                lead_professions=record.lead_professions,
+                staffing_requirements=record.staffing_requirements,
             )
         )
         new_ids.append(goal_id)

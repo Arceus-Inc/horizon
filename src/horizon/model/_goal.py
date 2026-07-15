@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from dream.contracts import StaffingRequirement
+
 
 @dataclass
 class Goal:
@@ -26,3 +28,14 @@ class Goal:
     target: str | None = None
     evidence: list[str] = field(default_factory=list)
     task_id: str | None = None  # the chorus task realizing this goal, once submitted
+    root_task_id: str | None = None
+    task_ids: list[str] = field(default_factory=list)
+    team_id: str | None = None
+    lead_id: str | None = None
+    task_outcomes: dict[str, str] = field(default_factory=dict)
+    delivery_shape: str = "single"
+    lead_professions: tuple[str, ...] = ()
+    staffing_requirements: tuple[StaffingRequirement, ...] = ()
+    effective_score: float | None = None
+    effective_priority: str | None = None
+    priority_reason: str = ""

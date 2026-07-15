@@ -15,9 +15,9 @@ from horizon.planning._effective_priority import EffectivePriorityPolicy, Effect
 from horizon.planning._reasoner import CompletionResult, Reasoner
 
 __all__ = [
-	"CompletionResult",
-	"Decomposer",
-	"EffectivePriorityPolicy",
-	"EffectiveResult",
-	"Reasoner",
+    "CompletionResult",
+    "Decomposer",
+    "EffectivePriorityPolicy",
+    "EffectiveResult",
+    "Reasoner",
 ]

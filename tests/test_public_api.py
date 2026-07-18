@@ -23,7 +23,6 @@ def test_top_level_surface_is_pinned():
         "Goal",
         "HealthPolicy",
         "Horizon",
-        "LoopReporter",
         "ScorePolicy",
         "StrategyRecord",
         "StrategyStore",

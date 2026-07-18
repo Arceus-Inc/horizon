@@ -52,6 +52,7 @@ from horizon.ports import (
     OutcomeFeed,
     StaffingBlocked,
 )
+from horizon.reporting import LoopReporter
 from horizon.store import DecisionStore, StrategyStore
 
 
@@ -120,12 +121,21 @@ class Horizon:
             if reasoner is not None
             else None
         )
+        # The loop's own storyteller (restored 2026-07-18 with its consumer): the facade records
+        # decompose/submit/outcomes as they happen, and report() renders the markdown.
+        self.reporter = LoopReporter(score_policy=self._score_policy)
+
+        def _observe(event: OutcomeEvent, before: StrategyRecord, after: StrategyRecord) -> None:
+            self.reporter.observe(event, before, after)
+            if outcome_observer is not None:
+                outcome_observer(event, before, after)
+
         self._listener = OutcomeListener(
             outcomes=outcomes,
             strategy=self._strategy,
             prioritiser=self._prioritiser,
             policy=self._health_policy,
-            observer=outcome_observer,
+            observer=_observe,
         )
         self._reconciler = Reconciler(proposals=self._proposals, decisions=self._decisions)
         self._approvals = Approvals(proposals=self._proposals, promote=self._promote_proposal)
@@ -145,7 +155,11 @@ class Horizon:
         """Break a decision into goals via the LLM (requires a reasoner)."""
         if self._decomposer is None:
             raise HorizonError("Horizon was built without a reasoner; cannot decompose")
-        return self._decomposer.decompose(decision_id)
+        goals = self._decomposer.decompose(decision_id)
+        decision = self._decisions.get(decision_id)
+        if decision is not None:
+            self.reporter.record_decomposition(decision, goals)
+        return goals
 
     def submit_goal(self, goal: Goal) -> str | StaffingBlocked:
         """Submit one leaf goal to chorus (idempotent); returns the task id or a StaffingBlocked result."""
@@ -165,13 +179,20 @@ class Horizon:
 
     def _submit_goal(self, goal: Goal) -> str | StaffingBlocked:
         if goal.delivery_shape != "team":
-            return self._submitter.submit(goal)
+            task_id = self._submitter.submit(goal)
+            self.reporter.record_submission(
+                goal, task_id, assignee=goal.owner or self._default_assignee
+            )
+            return task_id
         if self._delegated_submitter is None:
             raise HorizonError(
                 "Horizon was built without delegated intake; cannot submit team goal"
             )
         result = self._delegated_submitter.submit(goal)
-        return result.root_task_id if isinstance(result, DelegatedWorkRef) else result
+        root = result.root_task_id if isinstance(result, DelegatedWorkRef) else result
+        if isinstance(root, str):  # StaffingBlocked never opened a task — nothing to report
+            self.reporter.record_submission(goal, root, assignee=goal.lead_id)
+        return root
 
     # -- generation funnel (Theme C — evidence -> proposed decisions, human-gated) ------------
 
@@ -450,6 +471,10 @@ class Horizon:
             requirements=record.staffing_requirements,
             capacities=self._capacity.snapshot(),
         )
+
+    def report(self) -> str:
+        """The loop's story so far (decompose -> submit -> outcomes) + current direction, as markdown."""
+        return self.reporter.render(self.state())
 
     def state(self) -> list[DecisionState]:
         """The current direction: every decision with its assembled goals (the read model)."""

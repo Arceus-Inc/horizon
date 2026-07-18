@@ -29,9 +29,7 @@ class _DelegatedIntake:
         self.result = result
         self.requests: list[DelegatedWorkRequest] = []
 
-    def submit_delegated(
-        self, request: DelegatedWorkRequest
-    ) -> DelegatedWorkRef | StaffingBlocked:
+    def submit_delegated(self, request: DelegatedWorkRequest) -> DelegatedWorkRef | StaffingBlocked:
         self.requests.append(request)
         return self.result
 
@@ -264,7 +262,9 @@ def test_passing_outcome_marks_goal_done_in_state(tmp_path):
     horizon.start()
 
     goal = horizon.state()[0].goals[0]
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=True))
+    feed.emit(
+        OutcomeEvent(kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=True)
+    )
 
     assert horizon.state()[0].goals[0].status == "done"
     assert horizon.listener_stats() == {"handled": 1, "dropped": 0, "deferred": 0}
@@ -299,7 +299,10 @@ def test_recover_resubmits_failed_goal_with_diagnostic(tmp_path):
 
     feed.emit(
         OutcomeEvent(
-            kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=False,
+            kind="run.evaluated",
+            task_id=goal.task_id,
+            goal_id=goal.id,
+            passed=False,
             detail="evaluator reply missing <verdict> section",
         )
     )
@@ -322,7 +325,11 @@ def test_recover_respects_max_attempts(tmp_path):
         goal = horizon.state()[0].goals[0]
         feed.emit(
             OutcomeEvent(
-                kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=False, detail="nope"
+                kind="run.evaluated",
+                task_id=goal.task_id,
+                goal_id=goal.id,
+                passed=False,
+                detail="nope",
             )
         )
         horizon.recover(max_attempts=2)
@@ -357,15 +364,25 @@ def test_sweep_staleness_drifts_and_resurfaces_aged_goals(tmp_path):
     # a goal verified 2 days ago (on_track + done) with a live task -> should drift
     strategy.put(
         StrategyRecord(
-            goal_id="g1", title="Old goal", score=0.30, health="on_track", done=True,
-            task_id="task_1", last_outcome_at=(now - timedelta(days=2)).isoformat(),
+            goal_id="g1",
+            title="Old goal",
+            score=0.30,
+            health="on_track",
+            done=True,
+            task_id="task_1",
+            last_outcome_at=(now - timedelta(days=2)).isoformat(),
         )
     )
     # a goal verified 5 minutes ago -> should NOT drift
     strategy.put(
         StrategyRecord(
-            goal_id="g2", title="Fresh goal", score=0.30, health="on_track", done=True,
-            task_id="task_2", last_outcome_at=(now - timedelta(minutes=5)).isoformat(),
+            goal_id="g2",
+            title="Fresh goal",
+            score=0.30,
+            health="on_track",
+            done=True,
+            task_id="task_2",
+            last_outcome_at=(now - timedelta(minutes=5)).isoformat(),
         )
     )
     intake.priorities["task_1"] = "low"
@@ -387,3 +404,37 @@ def test_sweep_staleness_drifts_and_resurfaces_aged_goals(tmp_path):
     assert aged.score == 0.45  # 0.30 + 0.15 stale_bump
     assert intake.priorities["task_1"] == "medium"  # 0.45 crosses the low->medium threshold
     assert strategy.get("g2").health == "on_track"  # fresh goal untouched
+
+
+def test_recover_new_task_identity_survives_store_round_trip(tmp_path):
+    horizon, _intake, feed = _decomposed_horizon(tmp_path)
+    goal = horizon.state()[0].goals[0]
+    original_task = goal.task_id
+
+    feed.emit(
+        OutcomeEvent(
+            kind="run.evaluated",
+            task_id=original_task,
+            goal_id=goal.id,
+            passed=False,
+            detail="boom",
+        )
+    )
+    recovered = horizon.recover(max_attempts=3)
+    assert recovered == [goal.id]
+
+    # A fresh read reconstructs the record from the store — the retry task must survive it.
+    refreshed = next(g for g in horizon.state()[0].goals if g.id == goal.id)
+    assert refreshed.task_id != original_task
+
+    # And the retry is the goal's new root: its passing outcome completes the goal.
+    feed.emit(
+        OutcomeEvent(
+            kind="run.evaluated",
+            task_id=refreshed.task_id,
+            goal_id=goal.id,
+            passed=True,
+        )
+    )
+    final = next(g for g in horizon.state()[0].goals if g.id == goal.id)
+    assert final.health == "on_track"

@@ -152,7 +152,9 @@ class Scout:
 
     @staticmethod
     def _to_candidate(item: dict[str, Any], known: set[str]) -> CandidateOpportunity:
-        refs = [str(r) for r in item.get("evidence_ids", []) if str(r) in known]  # ground to real ids
+        refs = [
+            str(r) for r in item.get("evidence_ids", []) if str(r) in known
+        ]  # ground to real ids
         return CandidateOpportunity(
             id=mint_id("cand"),
             title=str(item["title"]).strip(),

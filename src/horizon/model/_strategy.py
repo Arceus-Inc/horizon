@@ -23,7 +23,9 @@ class StrategyRecord:
     """
 
     goal_id: str
-    title: str = ""  # cached display title (chorus owns the canonical one; this makes reads offline-safe)
+    title: str = (
+        ""  # cached display title (chorus owns the canonical one; this makes reads offline-safe)
+    )
     score: float = 0.0
     health: str = "unknown"  # on_track | drifting | blocked | unknown
     metric: str | None = None
@@ -46,13 +48,20 @@ class StrategyRecord:
     last_outcome_at: str | None = None  # ISO ts of the last landed outcome (staleness input)
     done: bool = False  # a passing DoD landed — in v1 (one task per goal) the goal's work is done
     attempts: int = 0  # how many times this goal has been submitted (initial + recoveries)
-    needs_recovery: bool = False  # a terminal failure landed; awaiting a diagnostic-carrying re-attempt
-    last_diagnostic: str = ""  # why the last attempt failed — stored on the node, read into the next beat
+    needs_recovery: bool = (
+        False  # a terminal failure landed; awaiting a diagnostic-carrying re-attempt
+    )
+    last_diagnostic: str = (
+        ""  # why the last attempt failed — stored on the node, read into the next beat
+    )
 
     def __post_init__(self) -> None:
-        """Keep the legacy task identity aligned with the authoritative root."""
-        if self.root_task_id is not None:
-            self.task_id = self.root_task_id
-        elif self.task_id is not None:
-            self.root_task_id = self.task_id
+        """Backfill whichever task identity is missing — never overwrite one that is set.
 
+        Legacy records carry only ``task_id``; M8 records carry ``root_task_id``. Overwriting a set
+        ``task_id`` here silently reverted ``recover()``'s retry task on every store reload.
+        """
+        if self.root_task_id is None:
+            self.root_task_id = self.task_id
+        elif self.task_id is None:
+            self.task_id = self.root_task_id

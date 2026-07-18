@@ -60,12 +60,14 @@ def test_strategy_store_round_trips_typed_team_execution_shape(tmp_path) -> None
 
     restored = store.get("goal-1")
 
+    # Both identities survive as written: backfill only fills a MISSING side, never overwrites a
+    # set one — recover() legitimately points task_id at a new retry task (and moves the root too).
     assert restored is not None and (
         restored.task_id,
         restored.root_task_id,
         restored.staffing_requirements,
     ) == (
-        "root-task",
+        "legacy-task",
         "root-task",
         (
             StaffingRequirement(profession="engineer", count=2),

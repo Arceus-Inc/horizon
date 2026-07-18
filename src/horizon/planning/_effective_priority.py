@@ -73,10 +73,13 @@ class EffectivePriorityPolicy:
         if not dependencies_ready:
             multiplier *= self.dependency_multiplier
         effective_score = round(score * multiplier, 4)
-        load_detail = ", ".join(
-            f"{profession} load {active}/{available}"
-            for profession, _, active, available in loads
-        ) or "no staffing requirements"
+        load_detail = (
+            ", ".join(
+                f"{profession} load {active}/{available}"
+                for profession, _, active, available in loads
+            )
+            or "no staffing requirements"
+        )
         reason_parts = [f"{load_label} load: {load_detail}"]
         reason_parts.extend(budget_notes or ["budget healthy"])
         if not dependencies_ready:

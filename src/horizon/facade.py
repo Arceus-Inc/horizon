@@ -131,7 +131,9 @@ class Horizon:
         self._approvals = Approvals(proposals=self._proposals, promote=self._promote_proposal)
         self._evidence_bus = EvidenceBus()
         self._scout: Scout | None = Scout(reasoner=reasoner, model=model) if reasoner else None
-        self._analyst: Analyst | None = Analyst(reasoner=reasoner, model=model) if reasoner else None
+        self._analyst: Analyst | None = (
+            Analyst(reasoner=reasoner, model=model) if reasoner else None
+        )
 
     # -- direction (writes) ---------------------------------------------------
 
@@ -165,7 +167,9 @@ class Horizon:
         if goal.delivery_shape != "team":
             return self._submitter.submit(goal)
         if self._delegated_submitter is None:
-            raise HorizonError("Horizon was built without delegated intake; cannot submit team goal")
+            raise HorizonError(
+                "Horizon was built without delegated intake; cannot submit team goal"
+            )
         result = self._delegated_submitter.submit(goal)
         return result.root_task_id if isinstance(result, DelegatedWorkRef) else result
 
@@ -371,6 +375,11 @@ class Horizon:
                 ),
             )
             record.task_id = task_id
+            record.root_task_id = task_id  # the retry is the new root; outcome folding keys on it
+            if task_id not in record.task_ids:
+                record.task_ids.append(task_id)
+            record.task_outcomes = {}  # fresh attempt — the dead tree's verdicts must not drag health
+            record.task_outcome_revisions = {}
             record.attempts += 1
             record.needs_recovery = False
             record.done = False

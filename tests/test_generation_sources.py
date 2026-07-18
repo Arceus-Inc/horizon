@@ -50,8 +50,14 @@ def test_seed_source_records_and_polls():
 
 def test_internal_source_converts_outcomes_to_packets():
     feed = FakeOutcomeFeed()
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="t1", goal_id="g1", passed=True, detail="clean"))
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="t2", goal_id="g2", passed=False, detail="regressed"))
+    feed.emit(
+        OutcomeEvent(kind="run.evaluated", task_id="t1", goal_id="g1", passed=True, detail="clean")
+    )
+    feed.emit(
+        OutcomeEvent(
+            kind="run.evaluated", task_id="t2", goal_id="g2", passed=False, detail="regressed"
+        )
+    )
     src = InternalSource(feed, now=lambda: _NOW)
 
     packets = src.poll()
@@ -74,7 +80,9 @@ def test_internal_and_seed_satisfy_the_source_adapter_protocol():
 
 def test_gate_allows_listed_host_with_credential():
     gate = GovernanceGate(allowed_hosts=["example.com"])
-    gate.authorize("https://data.example.com/report", credential="key")  # subdomain allowed, no raise
+    gate.authorize(
+        "https://data.example.com/report", credential="key"
+    )  # subdomain allowed, no raise
 
 
 def test_gate_blocks_unlisted_host():

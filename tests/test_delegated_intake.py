@@ -20,9 +20,7 @@ class FakeDelegatedIntake:
         self.result = result
         self.requests: list[DelegatedWorkRequest] = []
 
-    def submit_delegated(
-        self, request: DelegatedWorkRequest
-    ) -> DelegatedWorkRef | StaffingBlocked:
+    def submit_delegated(self, request: DelegatedWorkRequest) -> DelegatedWorkRef | StaffingBlocked:
         self.requests.append(request)
         return self.result
 

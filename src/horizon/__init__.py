@@ -16,7 +16,7 @@ from horizon.facade import Horizon
 from horizon.feedback import HealthPolicy
 from horizon.intake import ScorePolicy
 from horizon.model import Decision, DecisionState, Goal, StrategyRecord
-from horizon.reporting import render_direction
+from horizon.reporting import LoopReporter, render_direction
 from horizon.store import DecisionStore, StrategyStore
 
 __version__ = "0.1.0"
@@ -28,6 +28,7 @@ __all__ = [
     "Goal",
     "HealthPolicy",
     "Horizon",
+    "LoopReporter",
     "ScorePolicy",
     "StrategyRecord",
     "StrategyStore",

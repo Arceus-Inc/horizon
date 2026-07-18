@@ -23,7 +23,9 @@ from tests.fakes import FakeSubstrate, SequenceSubstrate
 
 def _evidence():
     return [
-        EvidencePacket(id="ev_1", source="chorus.internal", kind="signal", body="Region A margins up"),
+        EvidencePacket(
+            id="ev_1", source="chorus.internal", kind="signal", body="Region A margins up"
+        ),
         EvidencePacket(id="ev_2", source="seed", kind="note", body="Cofounder: double down on A"),
     ]
 
@@ -117,7 +119,9 @@ def test_analyst_retries_without_schema_on_bad_json():
             "rationale": "r",
             "confidence": 0.7,
             "risks": [],
-            "candidate_goals": [{"title": "g", "metric": "m", "target": "t", "rationale": "r", "score": 0.5}],
+            "candidate_goals": [
+                {"title": "g", "metric": "m", "target": "t", "rationale": "r", "score": 0.5}
+            ],
             "evidence_refs": ["ev_1"],
         }
     )
@@ -144,14 +148,29 @@ def test_evidence_gate_passes_a_strong_brief():
 def test_evidence_gate_rejects_low_confidence_or_no_evidence_or_no_goals():
     strong_goals = [CandidateGoal(title="g")]
     assert not passes_evidence_gate(  # low confidence
-        DirectionBrief(candidate_id="c", recommendation="x", confidence=0.4,
-                       candidate_goals=strong_goals, evidence_refs=["ev_1"])
+        DirectionBrief(
+            candidate_id="c",
+            recommendation="x",
+            confidence=0.4,
+            candidate_goals=strong_goals,
+            evidence_refs=["ev_1"],
+        )
     )
     assert not passes_evidence_gate(  # no evidence
-        DirectionBrief(candidate_id="c", recommendation="x", confidence=0.9,
-                       candidate_goals=strong_goals, evidence_refs=[])
+        DirectionBrief(
+            candidate_id="c",
+            recommendation="x",
+            confidence=0.9,
+            candidate_goals=strong_goals,
+            evidence_refs=[],
+        )
     )
     assert not passes_evidence_gate(  # no goals
-        DirectionBrief(candidate_id="c", recommendation="x", confidence=0.9,
-                       candidate_goals=[], evidence_refs=["ev_1"])
+        DirectionBrief(
+            candidate_id="c",
+            recommendation="x",
+            confidence=0.9,
+            candidate_goals=[],
+            evidence_refs=["ev_1"],
+        )
     )

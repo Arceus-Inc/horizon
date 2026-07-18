@@ -60,11 +60,15 @@ class OutcomeFold:
 
     @staticmethod
     def _recompute(record: StrategyRecord) -> None:
+        """Recompute health from the CURRENT outcome set — clears as well as escalates."""
         outcomes = set(record.task_outcomes.values())
         if record.done:
             record.health = "on_track"
-            return
-        if "blocked" in outcomes:
+        elif "blocked" in outcomes:
             record.health = "blocked"
         elif "failed" in outcomes:
             record.health = "drifting"
+        elif "passed" in outcomes:
+            record.health = "on_track"
+        else:
+            record.health = "unknown"

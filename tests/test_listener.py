@@ -131,7 +131,10 @@ def test_fail_flags_recovery_and_stores_diagnostic(tmp_path):
     listener.start()
     feed.emit(
         OutcomeEvent(
-            kind="run.evaluated", task_id="task_1", goal_id="g1", passed=False,
+            kind="run.evaluated",
+            task_id="task_1",
+            goal_id="g1",
+            passed=False,
             detail="evaluator reply missing <verdict> section",
         )
     )

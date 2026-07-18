@@ -21,9 +21,7 @@ def _decomposer(tmp_path, text):
     strategy = StrategyStore(tmp_path / "strategy.json")
     goals = FakeGoalStore()
     reasoner = FakeSubstrate(text)
-    decomposer = Decomposer(
-        goals=goals, strategy=strategy, decisions=decisions, reasoner=reasoner
-    )
+    decomposer = Decomposer(goals=goals, strategy=strategy, decisions=decisions, reasoner=reasoner)
     return decomposer, decisions, strategy, goals, reasoner
 
 

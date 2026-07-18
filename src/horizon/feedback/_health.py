@@ -24,7 +24,9 @@ class HealthPolicy:
 
     fail_bump: float = 0.25  # a fail raises score by this (surface it)
     pass_decay: float = 0.5  # a pass multiplies score by this (handled -> deprioritise)
-    block_pass_rate: float = 0.5  # a fresh fail with pass-rate below this -> blocked (else drifting)
+    block_pass_rate: float = (
+        0.5  # a fresh fail with pass-rate below this -> blocked (else drifting)
+    )
     stale_after_s: float = 86_400.0  # no outcome for this long -> an on_track goal drifts
     stale_bump: float = 0.15  # a drifted-by-staleness goal is resurfaced by this much score
 

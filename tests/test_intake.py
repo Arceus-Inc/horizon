@@ -36,7 +36,14 @@ def test_fingerprint_is_deterministic_goal_scoped_and_intent_sensitive():
 
 @pytest.mark.parametrize(
     "score,expected",
-    [(1.0, "high"), (0.75, "high"), (0.74, "medium"), (0.40, "medium"), (0.39, "low"), (0.0, "low")],
+    [
+        (1.0, "high"),
+        (0.75, "high"),
+        (0.74, "medium"),
+        (0.40, "medium"),
+        (0.39, "low"),
+        (0.0, "low"),
+    ],
 )
 def test_default_policy_buckets(score, expected):
     assert ScorePolicy().priority_for(score) == expected
@@ -77,7 +84,11 @@ def _submitter(tmp_path, *, default_assignee=None, record=None):
     if record is not None:
         strategy.put(record)
     intake = FakeIntakePort()
-    return Submitter(intake=intake, strategy=strategy, default_assignee=default_assignee), intake, strategy
+    return (
+        Submitter(intake=intake, strategy=strategy, default_assignee=default_assignee),
+        intake,
+        strategy,
+    )
 
 
 def test_submit_creates_one_task_linked_and_prioritised(tmp_path):

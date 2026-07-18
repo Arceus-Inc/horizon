@@ -43,7 +43,9 @@ def test_show_renders_direction_offline(tmp_path, capsys):
         Decision(id="dec_1", statement="Ship it", goal_ids=["g1"])
     )
     StrategyStore(tmp_path / "strategy.json").put(
-        StrategyRecord(goal_id="g1", title="Build API", score=0.9, health="on_track", decision_id="dec_1")
+        StrategyRecord(
+            goal_id="g1", title="Build API", score=0.9, health="on_track", decision_id="dec_1"
+        )
     )
 
     assert main(["--store", str(tmp_path), "show"]) == 0

@@ -151,6 +151,50 @@ class Horizon:
         """Persist a (horizon-native) decision — the top of the spine."""
         return self._decisions.put(decision)
 
+    def adopt_goal(
+        self,
+        goal_id: str,
+        *,
+        decision_id: str,
+        title: str | None = None,
+        score: float = 0.5,
+        metric: str | None = None,
+        target: str | None = None,
+    ) -> Goal | None:
+        """Mirror an EXISTING (externally-authored) goal into horizon under a decision — no authoring.
+
+        horizon normally *authors* goals into chorus via :meth:`decompose`. Some consumers instead own
+        the goal skeleton themselves (e.g. podium mints the founder-objective root goal directly in
+        chorus's ledger). For those, horizon **adopts** the existing goal rather than re-creating it:
+        it writes the missing :class:`StrategyRecord` (keyed by the existing ``goal_id``) and records
+        the decision -> goal edge, so the :class:`OutcomeListener` can fold that goal's verdicts and it
+        shows up in :meth:`report` / :meth:`state`. The skeleton stays chorus's — horizon only mirrors
+        the strategy fields (no goal duplication). Idempotent: re-adopting a goal already linked to the
+        decision leaves its strategy record untouched. Returns the assembled :class:`Goal`, or ``None``
+        when the goal id is unknown to the goal store.
+        """
+        node = self._goals.get(goal_id)
+        if node is None:
+            return None
+        decision = self._decisions.get(decision_id)
+        if decision is None:
+            raise UnknownDecision(decision_id)
+        if self._strategy.get(goal_id) is None:
+            self._strategy.put(
+                StrategyRecord(
+                    goal_id=goal_id,
+                    title=title or node.title,
+                    score=score,
+                    metric=metric,
+                    target=target,
+                    decision_id=decision_id,
+                )
+            )
+        if goal_id not in decision.goal_ids:
+            decision.goal_ids = [*decision.goal_ids, goal_id]
+            self._decisions.put(decision)
+        return self.goal_view(goal_id)
+
     def decompose(self, decision_id: str) -> list[Goal]:
         """Break a decision into goals via the LLM (requires a reasoner)."""
         if self._decomposer is None:

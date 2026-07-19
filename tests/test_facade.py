@@ -438,3 +438,41 @@ def test_recover_new_task_identity_survives_store_round_trip(tmp_path):
     )
     final = next(g for g in horizon.state()[0].goals if g.id == goal.id)
     assert final.health == "on_track"
+
+
+def test_adopt_goal_mirrors_an_external_goal_and_folds_its_outcomes(tmp_path):
+    """F2: a consumer that owns the goal skeleton (podium's founder-objective root goal) can mirror it
+    into horizon without re-authoring — the loop then has a live decision+goal, a non-empty report, and
+    the OutcomeListener folds the goal's verdicts."""
+    horizon, goals, _intake, feed = _horizon(tmp_path, "{}")
+    # chorus authored this goal (not horizon) — it already exists in the goal store.
+    goals.upsert(GoalNode(id="chorus-root", title="Build an AI note-taker", level="goal"))
+
+    horizon.seed_decision(Decision(id="dec-root", statement="Build an AI note-taker"))
+    adopted = horizon.adopt_goal("chorus-root", decision_id="dec-root")
+
+    assert adopted is not None and adopted.id == "chorus-root"
+    # The decision now carries the adopted goal — state() and report() populate (were empty before).
+    state = horizon.state()
+    assert len(state) == 1 and [g.id for g in state[0].goals] == ["chorus-root"]
+    report = horizon.report()
+    assert "Build an AI note-taker" in report
+
+    # No duplication: adopting does not mint a second goal node.
+    assert len(goals.children(None)) == 1
+
+    # The listener now has a strategy record to fold a landed verdict into.
+    horizon.start()
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="t1", goal_id="chorus-root", passed=True))
+    assert horizon.listener_stats()["handled"] == 1
+    assert next(g for g in horizon.state()[0].goals if g.id == "chorus-root").health == "on_track"
+
+    # Idempotent: re-adopting is a no-op (no second edge, record preserved).
+    horizon.adopt_goal("chorus-root", decision_id="dec-root")
+    assert [g.id for g in horizon.state()[0].goals] == ["chorus-root"]
+
+
+def test_adopt_goal_unknown_goal_returns_none(tmp_path):
+    horizon, _goals, _intake, _feed = _horizon(tmp_path, "{}")
+    horizon.seed_decision(Decision(id="dec-x", statement="x"))
+    assert horizon.adopt_goal("nope", decision_id="dec-x") is None

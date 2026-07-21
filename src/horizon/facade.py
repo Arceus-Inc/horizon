@@ -41,6 +41,7 @@ from horizon.planning._authoring import author_goals
 from horizon.planning._decomposer import Decomposer
 from horizon.planning._effective_priority import EffectivePriorityPolicy, EffectiveResult
 from horizon.planning._reasoner import Reasoner
+from horizon.planning._roadmap import validate_roadmap
 from horizon.ports import (
     CapacityPort,
     DelegatedIntakePort,
@@ -138,6 +139,36 @@ class Horizon:
     def seed_decision(self, decision: Decision) -> Decision:
         """Persist a (horizon-native) decision — the top of the spine."""
         return self._decisions.put(decision)
+
+    def propose_roadmap(
+        self,
+        statement: str,
+        specs: list[dict[str, object]],
+        *,
+        owner: str | None = None,
+    ) -> Decision:
+        """Author a CEO-reasoned roadmap deterministically: seed a *proposed* decision + its goals.
+
+        The ledger's LLM-free accept-path (the deterministic mirror of :meth:`decompose`). It enforces
+        the STRUCTURAL invariants (defense in depth — see :func:`horizon.planning._roadmap.validate_roadmap`)
+        *before* writing anything, seeds a ``proposed`` decision, and authors the goals via the shared
+        :func:`author_goals` writer. It is **author-only**: nothing reaches the intake port here —
+        submission stays with :meth:`submit_decision` / on approval. Requires no reasoner. Raises
+        :class:`~horizon.errors.RoadmapError` (leaving no partial writes) on any structural breach.
+        """
+        done_titles = [record.title for record in self._strategy.all() if record.done and record.title]
+        validated = validate_roadmap(specs, done_titles=done_titles)
+        decision = Decision(id=mint_id("dec"), statement=statement, status="proposed", owner=owner)
+        self._decisions.put(decision)
+        author_goals(
+            decision,
+            validated,
+            goals=self._goals,
+            strategy=self._strategy,
+            decisions=self._decisions,
+        )
+        return decision
+
 
     def decompose(self, decision_id: str) -> list[Goal]:
         """Break a decision into goals via the LLM (requires a reasoner)."""

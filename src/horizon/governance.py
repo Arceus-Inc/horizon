@@ -93,7 +93,27 @@ class HorizonGovernance:
             for p in self._horizon.list_proposals(status=None)
             if p.status != "proposed"
         )
-        return GovernanceView(decisions=tuple(decisions), proposals=proposals, decided=decided)
+        return GovernanceView(
+            decisions=tuple(decisions),
+            proposals=proposals,
+            decided=decided,
+            capacity=self._horizon.digest().capacity,
+        )
+
+    def propose_roadmap(
+        self,
+        statement: str,
+        specs,
+        *,
+        by: str | None = None,
+    ) -> str:
+        """Author a CEO-reasoned roadmap through the ledger's deterministic accept-path.
+
+        Delegates straight to :meth:`Horizon.propose_roadmap` (structural validation + author-only, no
+        submit); returns the new *proposed* decision's id. A structural breach raises
+        :class:`~horizon.errors.RoadmapError` up to the caller (the chorus tool surfaces it as a refusal).
+        """
+        return self._horizon.propose_roadmap(statement, list(specs), owner=by).id
 
     def approve_proposal(self, proposal_id: str, *, by: str) -> str:
         # Idempotent by design: a governance beat may re-attempt the same call across dream's

@@ -161,7 +161,13 @@ def test_generate_runs_the_whole_funnel_head_to_tail(tmp_path):
             "confidence": 0.8,
             "risks": ["data may be stale"],
             "candidate_goals": [
-                {"title": "Quantify A upside", "metric": "profit", "target": "+10%", "rationale": "r", "score": 0.9}
+                {
+                    "title": "Quantify A upside",
+                    "metric": "profit",
+                    "target": "+10%",
+                    "rationale": "r",
+                    "score": 0.9,
+                }
             ],
             "evidence_refs": ["__EV__"],
         }

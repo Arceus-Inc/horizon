@@ -18,7 +18,9 @@ def test_pass_sets_on_track_and_decays_score():
 
 
 def test_fail_with_prior_pass_is_drifting_and_bumps_score():
-    record = StrategyRecord(goal_id="g", score=0.5, passes=1)  # pass-rate after fail = 0.5 -> drifting
+    record = StrategyRecord(
+        goal_id="g", score=0.5, passes=1
+    )  # pass-rate after fail = 0.5 -> drifting
     apply_outcome(record, passed=False)
     assert record.health == "drifting"
     assert record.fails == 1
@@ -42,7 +44,9 @@ def test_score_is_clamped_to_unit_range():
 
 def test_custom_policy_knobs_are_honored():
     policy = HealthPolicy(fail_bump=0.1, pass_decay=0.9, block_pass_rate=0.8)
-    record = StrategyRecord(goal_id="g", score=0.5, passes=3)  # pass-rate 3/4 = 0.75 < 0.8 -> blocked
+    record = StrategyRecord(
+        goal_id="g", score=0.5, passes=3
+    )  # pass-rate 3/4 = 0.75 < 0.8 -> blocked
     apply_outcome(record, passed=False, policy=policy)
     assert record.health == "blocked"
     assert record.score == 0.6  # 0.5 + 0.1

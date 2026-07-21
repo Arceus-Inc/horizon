@@ -32,10 +32,6 @@ dev = [
   "pytest-asyncio>=0.23",
   "ruff>=0.6",
   "mypy>=1.11",
-  # chorus is NOT a runtime dependency of the horizon SDK. It is pulled in for the composition-root
-  # example (examples/chorus_bridge.py) and the M1 seam test only — the one place allowed to import
-  # both chorus's concretes and horizon's dream.contracts ports.
-  "chorus",
   # openai backs dream's OpenAIChatSubstrate (the real Reasoner) for the composition root + live tests.
   # The SDK core depends only on the Reasoner Protocol, never on openai directly.
   "openai>=1.40",
@@ -48,12 +44,10 @@ horizon = "horizon_cli.__main__:main"
 Homepage   = "https://github.com/Arceus-Inc/horizon"
 Repository = "https://github.com/Arceus-Inc/horizon"
 
-# dream is a sibling repo; during local development install it editable. A consumer that runs the
-# horizon<->chorus loop also installs chorus editable (only the composition root imports both):
-#   uv pip install -e ../dream -e ../chorus -e .[dev]
+# dream is a sibling repo; during local development install it editable:
+#   uv pip install -e ../dream -e .[dev]
 [tool.uv.sources]
 dream = { path = "../dream", editable = true }
-chorus = { path = "../chorus", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/horizon", "src/horizon_cli"]

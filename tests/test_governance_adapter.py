@@ -64,7 +64,9 @@ def test_horizon_governance_satisfies_the_port(tmp_path) -> None:
 
 def test_read_direction_folds_the_live_tree_and_open_proposals(tmp_path) -> None:
     horizon = _horizon(tmp_path)
-    dec_id = horizon.approve_proposal(horizon.reconcile([_brief("Grow in region A")])[0].id, by="ceo")
+    dec_id = horizon.approve_proposal(
+        horizon.reconcile([_brief("Grow in region A")])[0].id, by="ceo"
+    )
     open_p = horizon.reconcile([_brief("Expand to region B")])[0]
 
     view = HorizonGovernance(horizon).read_direction()
@@ -113,10 +115,7 @@ def test_write_verbs_delegate_to_the_facade_and_mutate_state(tmp_path) -> None:
     assert gov.set_priority(goal.goal_id, "high") == "high"
     gov.archive_goal(goal.goal_id)
     archived = next(
-        g
-        for d in gov.read_direction().decisions
-        for g in d.goals
-        if g.goal_id == goal.goal_id
+        g for d in gov.read_direction().decisions for g in d.goals if g.goal_id == goal.goal_id
     )
     assert archived.status == "archived"
 
@@ -144,7 +143,9 @@ def test_approve_and_reject_are_idempotent(tmp_path) -> None:
     gov = HorizonGovernance(horizon)
 
     dec = gov.approve_proposal(approve_p.id, by="ceo")
-    assert gov.approve_proposal(approve_p.id, by="ceo") == approve_p.id  # 2nd approve: no-op success
+    assert (
+        gov.approve_proposal(approve_p.id, by="ceo") == approve_p.id
+    )  # 2nd approve: no-op success
     assert dec  # the first returned a real decision id
 
     gov.reject_proposal(reject_p.id, by="ceo", reason="thin")

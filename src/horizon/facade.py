@@ -55,6 +55,7 @@ from horizon.ports import (
     OutcomeFeed,
     StaffingBlocked,
 )
+from horizon.reporting import LoopReporter
 from horizon.store import DecisionStore, StrategyStore
 
 
@@ -123,18 +124,29 @@ class Horizon:
             if reasoner is not None
             else None
         )
+        # The loop's own storyteller (restored 2026-07-18 with its consumer): the facade records
+        # decompose/submit/outcomes as they happen, and report() renders the markdown.
+        self.reporter = LoopReporter(score_policy=self._score_policy)
+
+        def _observe(event: OutcomeEvent, before: StrategyRecord, after: StrategyRecord) -> None:
+            self.reporter.observe(event, before, after)
+            if outcome_observer is not None:
+                outcome_observer(event, before, after)
+
         self._listener = OutcomeListener(
             outcomes=outcomes,
             strategy=self._strategy,
             prioritiser=self._prioritiser,
             policy=self._health_policy,
-            observer=outcome_observer,
+            observer=_observe,
         )
         self._reconciler = Reconciler(proposals=self._proposals, decisions=self._decisions)
         self._approvals = Approvals(proposals=self._proposals, promote=self._promote_proposal)
         self._evidence_bus = EvidenceBus()
         self._scout: Scout | None = Scout(reasoner=reasoner, model=model) if reasoner else None
-        self._analyst: Analyst | None = Analyst(reasoner=reasoner, model=model) if reasoner else None
+        self._analyst: Analyst | None = (
+            Analyst(reasoner=reasoner, model=model) if reasoner else None
+        )
 
     # -- direction (writes) ---------------------------------------------------
 
@@ -193,12 +205,59 @@ class Horizon:
             self._decisions.put(decision)
         return task_ids
 
+    def adopt_goal(
+        self,
+        goal_id: str,
+        *,
+        decision_id: str,
+        title: str | None = None,
+        score: float = 0.5,
+        metric: str | None = None,
+        target: str | None = None,
+    ) -> Goal | None:
+        """Mirror an EXISTING (externally-authored) goal into horizon under a decision — no authoring.
+
+        horizon normally *authors* goals into chorus via :meth:`decompose`. Some consumers instead own
+        the goal skeleton themselves (e.g. podium mints the founder-objective root goal directly in
+        chorus's ledger). For those, horizon **adopts** the existing goal rather than re-creating it:
+        it writes the missing :class:`StrategyRecord` (keyed by the existing ``goal_id``) and records
+        the decision -> goal edge, so the :class:`OutcomeListener` can fold that goal's verdicts and it
+        shows up in :meth:`report` / :meth:`state`. The skeleton stays chorus's — horizon only mirrors
+        the strategy fields (no goal duplication). Idempotent: re-adopting a goal already linked to the
+        decision leaves its strategy record untouched. Returns the assembled :class:`Goal`, or ``None``
+        when the goal id is unknown to the goal store.
+        """
+        node = self._goals.get(goal_id)
+        if node is None:
+            return None
+        decision = self._decisions.get(decision_id)
+        if decision is None:
+            raise UnknownDecision(decision_id)
+        if self._strategy.get(goal_id) is None:
+            self._strategy.put(
+                StrategyRecord(
+                    goal_id=goal_id,
+                    title=title or node.title,
+                    score=score,
+                    metric=metric,
+                    target=target,
+                    decision_id=decision_id,
+                )
+            )
+        if goal_id not in decision.goal_ids:
+            decision.goal_ids = [*decision.goal_ids, goal_id]
+            self._decisions.put(decision)
+        return self.goal_view(goal_id)
 
     def decompose(self, decision_id: str) -> list[Goal]:
         """Break a decision into goals via the LLM (requires a reasoner)."""
         if self._decomposer is None:
             raise HorizonError("Horizon was built without a reasoner; cannot decompose")
-        return self._decomposer.decompose(decision_id)
+        goals = self._decomposer.decompose(decision_id)
+        decision = self._decisions.get(decision_id)
+        if decision is not None:
+            self.reporter.record_decomposition(decision, goals)
+        return goals
 
     def submit_goal(self, goal: Goal) -> str | StaffingBlocked:
         """Submit one leaf goal to chorus (idempotent); returns the task id or a StaffingBlocked result."""
@@ -218,11 +277,20 @@ class Horizon:
 
     def _submit_goal(self, goal: Goal) -> str | StaffingBlocked:
         if goal.delivery_shape != "team":
-            return self._submitter.submit(goal)
+            task_id = self._submitter.submit(goal)
+            self.reporter.record_submission(
+                goal, task_id, assignee=goal.owner or self._default_assignee
+            )
+            return task_id
         if self._delegated_submitter is None:
-            raise HorizonError("Horizon was built without delegated intake; cannot submit team goal")
+            raise HorizonError(
+                "Horizon was built without delegated intake; cannot submit team goal"
+            )
         result = self._delegated_submitter.submit(goal)
-        return result.root_task_id if isinstance(result, DelegatedWorkRef) else result
+        root = result.root_task_id if isinstance(result, DelegatedWorkRef) else result
+        if isinstance(root, str):  # StaffingBlocked never opened a task — nothing to report
+            self.reporter.record_submission(goal, root, assignee=goal.lead_id)
+        return root
 
     # -- generation funnel (Theme C — evidence -> proposed decisions, human-gated) ------------
 
@@ -426,6 +494,11 @@ class Horizon:
                 ),
             )
             record.task_id = task_id
+            record.root_task_id = task_id  # the retry is the new root; outcome folding keys on it
+            if task_id not in record.task_ids:
+                record.task_ids.append(task_id)
+            record.task_outcomes = {}  # fresh attempt — the dead tree's verdicts must not drag health
+            record.task_outcome_revisions = {}
             record.attempts += 1
             record.needs_recovery = False
             record.done = False
@@ -496,6 +569,10 @@ class Horizon:
             requirements=record.staffing_requirements,
             capacities=self._capacity.snapshot(),
         )
+
+    def report(self) -> str:
+        """The loop's story so far (decompose -> submit -> outcomes) + current direction, as markdown."""
+        return self.reporter.render(self.state())
 
     def state(self) -> list[DecisionState]:
         """The current direction: every decision with its assembled goals (the read model)."""

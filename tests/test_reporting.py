@@ -54,6 +54,36 @@ def _emit(horizon, feed, goal_id, passed):
     )
 
 
+def test_facade_report_captures_the_loop_without_manual_recording(tmp_path):
+    """Activation 2026-07-18: the reporter is facade-owned — decompose/submit/outcomes are
+    recorded by the facade itself, and Horizon.report() renders the whole story."""
+    text = json.dumps({"goals": [{"title": "Build API", "score": 0.9}]})
+    feed = FakeOutcomeFeed()
+    horizon = Horizon(
+        goals=FakeGoalStore(),
+        intake=FakeIntakePort(),
+        outcomes=feed,
+        reasoner=FakeSubstrate(text),
+        decisions=DecisionStore(tmp_path / "decisions.json"),
+        strategy=StrategyStore(tmp_path / "strategy.json"),
+        default_assignee="moe",
+    )
+    horizon.seed_decision(Decision(id="dec_1", statement="Build a thing", owner="moe"))
+    made = horizon.decompose("dec_1")
+    horizon.start()
+    for goal in made:
+        horizon.submit_goal(goal)
+    _emit(horizon, feed, made[0].id, True)
+
+    report = horizon.report()
+
+    assert "## Decomposition" in report
+    assert "## Intake" in report
+    assert "**Verdicts folded:** 1" in report
+    assert "## Current direction" in report
+    assert "Build API" in report
+
+
 def test_report_contains_every_phase_section(tmp_path):
     horizon, feed, reporter, made = _loop(tmp_path)
     _emit(horizon, feed, made[0].id, True)

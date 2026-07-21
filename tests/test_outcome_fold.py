@@ -203,3 +203,40 @@ def test_exact_event_replay_is_ignored_even_when_payload_conflicts():
 
     assert changed is False
     assert record.task_outcomes["child-1"] == "failed"
+
+
+def test_health_clears_when_blocking_child_later_passes():
+    record = _team_record()
+    fold = OutcomeFold()
+
+    fold.apply(
+        record,
+        OutcomeEvent(kind="task.status", task_id="child-1", status="blocked", task_revision=1),
+    )
+    assert record.health == "blocked"
+
+    fold.apply(
+        record,
+        OutcomeEvent(kind="run.evaluated", task_id="child-1", passed=True, task_revision=2),
+    )
+
+    assert record.task_outcomes["child-1"] == "passed"
+    assert record.health == "on_track"  # the blocker resolved; health must not stick
+
+
+def test_health_clears_to_drifting_when_blocker_resolves_but_a_failure_remains():
+    record = _team_record()
+    fold = OutcomeFold()
+    fold.apply(record, OutcomeEvent(kind="run.evaluated", task_id="child-2", passed=False))
+    fold.apply(
+        record,
+        OutcomeEvent(kind="task.status", task_id="child-1", status="blocked", task_revision=1),
+    )
+    assert record.health == "blocked"
+
+    fold.apply(
+        record,
+        OutcomeEvent(kind="run.evaluated", task_id="child-1", passed=True, task_revision=2),
+    )
+
+    assert record.health == "drifting"  # blocker gone, the failed child still drags the goal

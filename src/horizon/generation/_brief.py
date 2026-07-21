@@ -61,7 +61,9 @@ class DirectionBrief:
             rationale=str(raw.get("rationale", "")),
             confidence=float(raw.get("confidence", 0.0) or 0.0),
             risks=list(raw.get("risks", []) or []),
-            candidate_goals=[CandidateGoal.from_dict(g) for g in raw.get("candidate_goals", []) or []],
+            candidate_goals=[
+                CandidateGoal.from_dict(g) for g in raw.get("candidate_goals", []) or []
+            ],
             evidence_refs=list(raw.get("evidence_refs", []) or []),
         )
 
@@ -175,9 +177,9 @@ class Analyst:
     ) -> DirectionBrief:
         """Turn one candidate into a DirectionBrief; grounds evidence_refs to the real packets."""
         known = {p.id for p in evidence}
-        prompt = _PROMPT.replace(
-            "__CANDIDATE__", f"{candidate.title}\n{candidate.thesis}"
-        ).replace("__EVIDENCE__", _render_evidence(evidence))
+        prompt = _PROMPT.replace("__CANDIDATE__", f"{candidate.title}\n{candidate.thesis}").replace(
+            "__EVIDENCE__", _render_evidence(evidence)
+        )
         params: dict[str, Any] = {"max_tokens": self._max_output_tokens}
         if self._model is not None:
             params["model"] = self._model

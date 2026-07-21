@@ -29,9 +29,7 @@ class _DelegatedIntake:
         self.result = result
         self.requests: list[DelegatedWorkRequest] = []
 
-    def submit_delegated(
-        self, request: DelegatedWorkRequest
-    ) -> DelegatedWorkRef | StaffingBlocked:
+    def submit_delegated(self, request: DelegatedWorkRequest) -> DelegatedWorkRef | StaffingBlocked:
         self.requests.append(request)
         return self.result
 
@@ -264,7 +262,9 @@ def test_passing_outcome_marks_goal_done_in_state(tmp_path):
     horizon.start()
 
     goal = horizon.state()[0].goals[0]
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=True))
+    feed.emit(
+        OutcomeEvent(kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=True)
+    )
 
     assert horizon.state()[0].goals[0].status == "done"
     assert horizon.listener_stats() == {"handled": 1, "dropped": 0, "deferred": 0}
@@ -299,7 +299,10 @@ def test_recover_resubmits_failed_goal_with_diagnostic(tmp_path):
 
     feed.emit(
         OutcomeEvent(
-            kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=False,
+            kind="run.evaluated",
+            task_id=goal.task_id,
+            goal_id=goal.id,
+            passed=False,
             detail="evaluator reply missing <verdict> section",
         )
     )
@@ -322,7 +325,11 @@ def test_recover_respects_max_attempts(tmp_path):
         goal = horizon.state()[0].goals[0]
         feed.emit(
             OutcomeEvent(
-                kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=False, detail="nope"
+                kind="run.evaluated",
+                task_id=goal.task_id,
+                goal_id=goal.id,
+                passed=False,
+                detail="nope",
             )
         )
         horizon.recover(max_attempts=2)
@@ -357,15 +364,25 @@ def test_sweep_staleness_drifts_and_resurfaces_aged_goals(tmp_path):
     # a goal verified 2 days ago (on_track + done) with a live task -> should drift
     strategy.put(
         StrategyRecord(
-            goal_id="g1", title="Old goal", score=0.30, health="on_track", done=True,
-            task_id="task_1", last_outcome_at=(now - timedelta(days=2)).isoformat(),
+            goal_id="g1",
+            title="Old goal",
+            score=0.30,
+            health="on_track",
+            done=True,
+            task_id="task_1",
+            last_outcome_at=(now - timedelta(days=2)).isoformat(),
         )
     )
     # a goal verified 5 minutes ago -> should NOT drift
     strategy.put(
         StrategyRecord(
-            goal_id="g2", title="Fresh goal", score=0.30, health="on_track", done=True,
-            task_id="task_2", last_outcome_at=(now - timedelta(minutes=5)).isoformat(),
+            goal_id="g2",
+            title="Fresh goal",
+            score=0.30,
+            health="on_track",
+            done=True,
+            task_id="task_2",
+            last_outcome_at=(now - timedelta(minutes=5)).isoformat(),
         )
     )
     intake.priorities["task_1"] = "low"
@@ -387,3 +404,75 @@ def test_sweep_staleness_drifts_and_resurfaces_aged_goals(tmp_path):
     assert aged.score == 0.45  # 0.30 + 0.15 stale_bump
     assert intake.priorities["task_1"] == "medium"  # 0.45 crosses the low->medium threshold
     assert strategy.get("g2").health == "on_track"  # fresh goal untouched
+
+
+def test_recover_new_task_identity_survives_store_round_trip(tmp_path):
+    horizon, _intake, feed = _decomposed_horizon(tmp_path)
+    goal = horizon.state()[0].goals[0]
+    original_task = goal.task_id
+
+    feed.emit(
+        OutcomeEvent(
+            kind="run.evaluated",
+            task_id=original_task,
+            goal_id=goal.id,
+            passed=False,
+            detail="boom",
+        )
+    )
+    recovered = horizon.recover(max_attempts=3)
+    assert recovered == [goal.id]
+
+    # A fresh read reconstructs the record from the store — the retry task must survive it.
+    refreshed = next(g for g in horizon.state()[0].goals if g.id == goal.id)
+    assert refreshed.task_id != original_task
+
+    # And the retry is the goal's new root: its passing outcome completes the goal.
+    feed.emit(
+        OutcomeEvent(
+            kind="run.evaluated",
+            task_id=refreshed.task_id,
+            goal_id=goal.id,
+            passed=True,
+        )
+    )
+    final = next(g for g in horizon.state()[0].goals if g.id == goal.id)
+    assert final.health == "on_track"
+
+
+def test_adopt_goal_mirrors_an_external_goal_and_folds_its_outcomes(tmp_path):
+    """F2: a consumer that owns the goal skeleton (podium's founder-objective root goal) can mirror it
+    into horizon without re-authoring — the loop then has a live decision+goal, a non-empty report, and
+    the OutcomeListener folds the goal's verdicts."""
+    horizon, goals, _intake, feed = _horizon(tmp_path, "{}")
+    # chorus authored this goal (not horizon) — it already exists in the goal store.
+    goals.upsert(GoalNode(id="chorus-root", title="Build an AI note-taker", level="goal"))
+
+    horizon.seed_decision(Decision(id="dec-root", statement="Build an AI note-taker"))
+    adopted = horizon.adopt_goal("chorus-root", decision_id="dec-root")
+
+    assert adopted is not None and adopted.id == "chorus-root"
+    # The decision now carries the adopted goal — state() and report() populate (were empty before).
+    state = horizon.state()
+    assert len(state) == 1 and [g.id for g in state[0].goals] == ["chorus-root"]
+    report = horizon.report()
+    assert "Build an AI note-taker" in report
+
+    # No duplication: adopting does not mint a second goal node.
+    assert len(goals.children(None)) == 1
+
+    # The listener now has a strategy record to fold a landed verdict into.
+    horizon.start()
+    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="t1", goal_id="chorus-root", passed=True))
+    assert horizon.listener_stats()["handled"] == 1
+    assert next(g for g in horizon.state()[0].goals if g.id == "chorus-root").health == "on_track"
+
+    # Idempotent: re-adopting is a no-op (no second edge, record preserved).
+    horizon.adopt_goal("chorus-root", decision_id="dec-root")
+    assert [g.id for g in horizon.state()[0].goals] == ["chorus-root"]
+
+
+def test_adopt_goal_unknown_goal_returns_none(tmp_path):
+    horizon, _goals, _intake, _feed = _horizon(tmp_path, "{}")
+    horizon.seed_decision(Decision(id="dec-x", statement="x"))
+    assert horizon.adopt_goal("nope", decision_id="dec-x") is None

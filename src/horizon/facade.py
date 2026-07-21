@@ -36,6 +36,7 @@ from horizon.intake._fingerprint import fingerprint
 from horizon.intake._prioritiser import Prioritiser, ScorePolicy
 from horizon.intake._submitter import Submitter
 from horizon.model import Decision, Goal, StrategyRecord
+from horizon.model._digest import RealityDigest, build_reality_digest
 from horizon.model._state import DecisionState
 from horizon.planning._authoring import author_goals
 from horizon.planning._decomposer import Decomposer
@@ -484,3 +485,15 @@ class Horizon:
             ]
             states.append(DecisionState(decision=decision, goals=goals))
         return states
+
+    def digest(self) -> RealityDigest:
+        """The deterministic reality digest the CEO plans against — no LLM.
+
+        A bounded snapshot assembled from the read model (:meth:`state`, minus archived decisions) plus
+        the optional :class:`~horizon.ports.CapacityPort` snapshot: goals grouped done / blocked /
+        in_flight, a per-decision summary, a health histogram, and capacity by profession (degrading to
+        ``capacity_available=False`` when no capacity port is wired).
+        """
+        live = [state for state in self.state() if state.decision.status != "archived"]
+        capacity = self._capacity.snapshot() if self._capacity is not None else None
+        return build_reality_digest(live, capacity=capacity)

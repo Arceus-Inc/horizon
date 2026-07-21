@@ -83,7 +83,16 @@ def test_feedback_surface_is_pinned():
 
 
 def test_model_surface_is_pinned():
-    assert _all(model) == {"Decision", "DecisionState", "Goal", "StrategyRecord"}
+    assert _all(model) == {
+        "Decision",
+        "DecisionDigest",
+        "DecisionState",
+        "Goal",
+        "GoalDigest",
+        "RealityDigest",
+        "StrategyRecord",
+        "build_reality_digest",
+    }
 
 
 def test_store_surface_is_pinned():
@@ -93,6 +102,8 @@ def test_store_surface_is_pinned():
 def test_horizon_facade_exposes_the_loop_methods():
     for method in (
         "seed_decision",
+        "propose_roadmap",
+        "digest",
         "decompose",
         "submit_goal",
         "submit_decision",

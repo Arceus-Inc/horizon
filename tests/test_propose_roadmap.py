@@ -74,6 +74,23 @@ def test_propose_roadmap_seeds_decision_and_authors_goals(tmp_path):
         assert 0.0 <= v.score <= 1.0
 
 
+def test_propose_roadmap_mints_canonical_uuid_goal_ids(tmp_path):
+    # Authored goal ids cross the strategy seam into chorus's Postgres ``goal`` table, whose ``id``
+    # column is native ``uuid`` (spec 12 §6). A legacy ``goal_<hex>`` id is unparseable as a uuid and
+    # is rejected by the column at insert time — so the ledger MUST mint canonical uuid text here.
+    from uuid import UUID
+
+    horizon, _goals, _intake, decisions, _strategy = _horizon(tmp_path)
+
+    decision = horizon.propose_roadmap("Mission", [_spec("Build the notes app"), _spec("Build timer")])
+
+    stored = decisions.get(decision.id)
+    assert stored is not None
+    for goal_id in stored.goal_ids:
+        # round-trips through UUID canonical text unchanged -> a native uuid column accepts it
+        assert str(UUID(goal_id)) == goal_id
+
+
 def test_propose_roadmap_is_author_only_never_submits(tmp_path):
     horizon, _goals, intake, _decisions, _strategy = _horizon(tmp_path)
 

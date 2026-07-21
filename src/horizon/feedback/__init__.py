@@ -13,11 +13,14 @@ from __future__ import annotations
 from horizon.feedback._fold import OutcomeFold
 from horizon.feedback._health import HealthPolicy, apply_outcome, staleness_health
 from horizon.feedback._listener import OutcomeListener
+from horizon.feedback._replan import ReplanSignal, detect_replan
 
 __all__ = [
     "HealthPolicy",
     "OutcomeFold",
     "OutcomeListener",
+    "ReplanSignal",
     "apply_outcome",
+    "detect_replan",
     "staleness_health",
 ]

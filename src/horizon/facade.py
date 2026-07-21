@@ -19,6 +19,7 @@ from horizon._ids import mint_id
 from horizon.errors import HorizonError, RoadmapError, UnknownDecision, UnknownGoal
 from horizon.feedback._health import HealthPolicy, staleness_health
 from horizon.feedback._listener import Observer, OutcomeListener
+from horizon.feedback._replan import ReplanSignal, detect_replan
 from horizon.generation import (
     Analyst,
     Approvals,
@@ -519,3 +520,12 @@ class Horizon:
         live = [state for state in self.state() if state.decision.status != "archived"]
         capacity = self._capacity.snapshot() if self._capacity is not None else None
         return build_reality_digest(live, capacity=capacity)
+
+    def detect_replan(self) -> ReplanSignal:
+        """The deterministic re-plan signal (no LLM): should the CEO be woken to re-plan, and why.
+
+        Folds the live reality digest (:meth:`digest`) through
+        :func:`horizon.feedback._replan.detect_replan`. horizon never dispatches — the consumer turns a
+        firing signal into a CEO wake, deduping so it does not re-wake while a re-plan is pending.
+        """
+        return detect_replan(self.digest())

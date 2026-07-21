@@ -77,7 +77,9 @@ def test_feedback_surface_is_pinned():
         "HealthPolicy",
         "OutcomeFold",
         "OutcomeListener",
+        "ReplanSignal",
         "apply_outcome",
+        "detect_replan",
         "staleness_health",
     }
 
@@ -104,6 +106,7 @@ def test_horizon_facade_exposes_the_loop_methods():
         "seed_decision",
         "propose_roadmap",
         "digest",
+        "detect_replan",
         "decompose",
         "submit_goal",
         "submit_decision",

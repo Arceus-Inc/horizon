@@ -115,6 +115,15 @@ class HorizonGovernance:
         """
         return self._horizon.propose_roadmap(statement, list(specs), owner=by).id
 
+    def approve_roadmap(self, decision_id: str, *, by: str | None = None) -> str:
+        """Approve a proposed roadmap through the ledger: submit its goals + activate the decision.
+
+        Delegates to :meth:`Horizon.approve_roadmap` (idempotent); returns the approved decision id. A
+        missing id or a done/archived decision raises up to the caller (the approval door surfaces it).
+        """
+        self._horizon.approve_roadmap(decision_id)
+        return decision_id
+
     def approve_proposal(self, proposal_id: str, *, by: str) -> str:
         # Idempotent by design: a governance beat may re-attempt the same call across dream's
         # planner/generator/evaluator phases and sprints. Approving an already-approved proposal is a

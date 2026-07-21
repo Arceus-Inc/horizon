@@ -16,7 +16,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from horizon._ids import mint_id
-from horizon.errors import HorizonError, UnknownDecision, UnknownGoal
+from horizon.errors import HorizonError, RoadmapError, UnknownDecision, UnknownGoal
 from horizon.feedback._health import HealthPolicy, staleness_health
 from horizon.feedback._listener import Observer, OutcomeListener
 from horizon.generation import (
@@ -169,6 +169,28 @@ class Horizon:
             decisions=self._decisions,
         )
         return decision
+
+    def approve_roadmap(self, decision_id: str) -> list[str | StaffingBlocked]:
+        """Approve a CEO-proposed roadmap: submit every goal to the workforce + activate the decision.
+
+        The approval door's verb (the counterpart of :meth:`propose_roadmap`, which is author-only). It
+        submits the decision's goals through the intake port (idempotent — the submitter fingerprints
+        each goal and skips one already realized) and flips the decision ``proposed -> active``. A
+        re-approve is a safe no-op. Raises :class:`~horizon.errors.UnknownDecision` for a missing id and
+        :class:`~horizon.errors.RoadmapError` for a decision that is already ``done``/``archived``.
+        """
+        decision = self._decisions.get(decision_id)
+        if decision is None:
+            raise UnknownDecision(decision_id)
+        if decision.status not in ("proposed", "active"):
+            raise RoadmapError(
+                f"decision {decision_id} is {decision.status!r}, not an approvable roadmap"
+            )
+        task_ids = self.submit_decision(decision_id)
+        if decision.status != "active":
+            decision.status = "active"
+            self._decisions.put(decision)
+        return task_ids
 
 
     def decompose(self, decision_id: str) -> list[Goal]:

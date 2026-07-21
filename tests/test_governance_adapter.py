@@ -239,6 +239,32 @@ def test_propose_roadmap_propagates_structural_rejections(tmp_path) -> None:
         gov.propose_roadmap("Mission", [_roadmap_spec("   ")], by="ceo")
 
 
+def test_approve_roadmap_through_the_port_submits_and_activates(tmp_path) -> None:
+    horizon = _horizon(tmp_path)
+    gov = HorizonGovernance(horizon)
+    dec_id = gov.propose_roadmap(
+        "Ship the suite", [_roadmap_spec("Notes"), _roadmap_spec("Timer")], by="ceo"
+    )
+    # proposed + author-only until the approval door acts
+    assert next(d for d in gov.read_direction().decisions if d.decision_id == dec_id).status == (
+        "proposed"
+    )
+
+    returned = gov.approve_roadmap(dec_id, by="ceo")
+
+    assert returned == dec_id
+    active = next(d for d in gov.read_direction().decisions if d.decision_id == dec_id)
+    assert active.status == "active"  # promoted; its goals are now submitted to the workforce
+
+
+def test_approve_roadmap_through_the_port_is_idempotent(tmp_path) -> None:
+    horizon = _horizon(tmp_path)
+    gov = HorizonGovernance(horizon)
+    dec_id = gov.propose_roadmap("Ship", [_roadmap_spec("Notes")], by="ceo")
+    gov.approve_roadmap(dec_id, by="ceo")
+    assert gov.approve_roadmap(dec_id, by="ceo") == dec_id  # re-approve: no raise
+
+
 def test_read_direction_carries_no_capacity_without_a_port(tmp_path) -> None:
     gov = HorizonGovernance(_horizon(tmp_path))
     assert gov.read_direction().capacity == ()

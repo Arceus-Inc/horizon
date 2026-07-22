@@ -476,3 +476,18 @@ def test_adopt_goal_unknown_goal_returns_none(tmp_path):
     horizon, _goals, _intake, _feed = _horizon(tmp_path, "{}")
     horizon.seed_decision(Decision(id="dec-x", statement="x"))
     assert horizon.adopt_goal("nope", decision_id="dec-x") is None
+
+
+def test_adopt_goal_activates_a_still_proposed_decision(tmp_path):
+    """Adopting real work under a decision is a commitment to execute it: a merely ``proposed`` decision
+    must become formally ``active`` so the company never runs goals beneath an un-adopted decision."""
+    horizon, goals, _intake, _feed = _horizon(tmp_path, "{}")
+    goals.upsert(GoalNode(id="chorus-root", title="Build an AI note-taker", level="goal"))
+    # A CEO-proposed roadmap decision starts life ``proposed`` (awaiting adoption/approval).
+    horizon.seed_decision(Decision(id="dec-road", statement="Ship the suite", status="proposed"))
+
+    horizon.adopt_goal("chorus-root", decision_id="dec-road")
+
+    stored = horizon._decisions.get("dec-road")
+    assert stored is not None and stored.status == "active"
+    assert stored.goal_ids == ["chorus-root"]

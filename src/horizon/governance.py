@@ -106,14 +106,18 @@ class HorizonGovernance:
         specs,
         *,
         by: str | None = None,
+        rationale: str = "",
     ) -> str:
         """Author a CEO-reasoned roadmap through the ledger's deterministic accept-path.
 
         Delegates straight to :meth:`Horizon.propose_roadmap` (structural validation + author-only, no
-        submit); returns the new *proposed* decision's id. A structural breach raises
-        :class:`~horizon.errors.RoadmapError` up to the caller (the chorus tool surfaces it as a refusal).
+        submit); returns the new *proposed* decision's id, carrying the CEO's ``rationale``. A structural
+        breach raises :class:`~horizon.errors.RoadmapError` up to the caller (the chorus tool surfaces
+        it as a refusal).
         """
-        return self._horizon.propose_roadmap(statement, list(specs), owner=by).id
+        return self._horizon.propose_roadmap(
+            statement, list(specs), owner=by, rationale=rationale
+        ).id
 
     def approve_roadmap(self, decision_id: str, *, by: str | None = None) -> str:
         """Approve a proposed roadmap through the ledger: submit its goals + activate the decision.

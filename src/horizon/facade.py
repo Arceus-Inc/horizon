@@ -160,19 +160,27 @@ class Horizon:
         specs: list[dict[str, object]],
         *,
         owner: str | None = None,
+        rationale: str = "",
     ) -> Decision:
         """Author a CEO-reasoned roadmap deterministically: seed a *proposed* decision + its goals.
 
         The ledger's LLM-free accept-path (the deterministic mirror of :meth:`decompose`). It enforces
         the STRUCTURAL invariants (defense in depth — see :func:`horizon.planning._roadmap.validate_roadmap`)
-        *before* writing anything, seeds a ``proposed`` decision, and authors the goals via the shared
-        :func:`author_goals` writer. It is **author-only**: nothing reaches the intake port here —
-        submission stays with :meth:`submit_decision` / on approval. Requires no reasoner. Raises
-        :class:`~horizon.errors.RoadmapError` (leaving no partial writes) on any structural breach.
+        *before* writing anything, seeds a ``proposed`` decision carrying the CEO's ``rationale``, and
+        authors the goals via the shared :func:`author_goals` writer. It is **author-only**: nothing
+        reaches the intake port here — submission stays with :meth:`submit_decision` / on approval.
+        Requires no reasoner. Raises :class:`~horizon.errors.RoadmapError` (leaving no partial writes)
+        on any structural breach.
         """
         done_titles = [record.title for record in self._strategy.all() if record.done and record.title]
         validated = validate_roadmap(specs, done_titles=done_titles)
-        decision = Decision(id=mint_id("dec"), statement=statement, status="proposed", owner=owner)
+        decision = Decision(
+            id=mint_id("dec"),
+            statement=statement,
+            status="proposed",
+            owner=owner,
+            rationale=rationale,
+        )
         self._decisions.put(decision)
         author_goals(
             decision,
@@ -246,6 +254,13 @@ class Horizon:
             )
         if goal_id not in decision.goal_ids:
             decision.goal_ids = [*decision.goal_ids, goal_id]
+            self._decisions.put(decision)
+        # Adopting a goal under a decision is a commitment to execute it: a still-``proposed`` decision
+        # becomes formally ``active`` the moment real work is adopted beneath it, so the company never
+        # runs goals under an un-adopted (merely proposed) decision. (``approve_roadmap`` activates the
+        # same way when it submits; this covers the adopt-external-goal path podium uses.)
+        if decision.status == "proposed":
+            decision.status = "active"
             self._decisions.put(decision)
         return self.goal_view(goal_id)
 

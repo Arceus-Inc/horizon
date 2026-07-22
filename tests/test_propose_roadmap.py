@@ -100,6 +100,23 @@ def test_propose_roadmap_is_author_only_never_submits(tmp_path):
     assert intake.submitted == []
 
 
+def test_propose_roadmap_records_the_ceo_rationale_on_the_decision(tmp_path):
+    # The decision the CEO records must carry its reasoning — an empty rationale is why the recorded
+    # decision looked hollow. The rationale threads through to the persisted decision object.
+    horizon, _goals, _intake, decisions, _strategy = _horizon(tmp_path)
+
+    decision = horizon.propose_roadmap(
+        "Ship the calm suite",
+        [_spec("Build the notes app")],
+        owner="ceo",
+        rationale="Only one active goal and idle capacity — start with the notes app to de-risk UX.",
+    )
+
+    assert decision.rationale.startswith("Only one active goal")
+    stored = decisions.get(decision.id)
+    assert stored is not None and stored.rationale == decision.rationale
+
+
 def test_propose_roadmap_needs_no_reasoner(tmp_path):
     # _horizon builds Horizon without a reasoner; this must not raise the "no reasoner" error.
     horizon, *_ = _horizon(tmp_path)

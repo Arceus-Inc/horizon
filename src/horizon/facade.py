@@ -466,13 +466,19 @@ class Horizon:
     def note_outcome(self, goal_id: str, *, passed: bool, diagnostic: str = "") -> None:
         """Record a terminal outcome that did NOT arrive as a bus verdict (e.g. a beat that errored).
 
-        chorus only publishes a verdict on ``run.evaluated``; a beat that errors in the evaluate phase
+        chorus only publishes a verdict on ``outcome.landed``; a beat that errors in the evaluate phase
         (a missing-verdict blip) leaves the task blocked with no bus signal. The composition root, which
         can read the ledger, calls this with the diagnostic it found so the failure still flows through
         the same fold — health/score/priority + the stored ``last_diagnostic`` all update uniformly.
         """
         self._listener.on_event(
-            OutcomeEvent(kind="run.evaluated", goal_id=goal_id, passed=passed, detail=diagnostic)
+            OutcomeEvent(
+                kind="outcome.landed",
+                goal_id=goal_id,
+                passed=passed,
+                phase="terminal_pass" if passed else "needs_rework",
+                detail=diagnostic,
+            )
         )
 
     def recover(self, *, max_attempts: int = 3) -> list[str]:

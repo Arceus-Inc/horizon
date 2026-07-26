@@ -50,7 +50,7 @@ def _loop(tmp_path):
 def _emit(horizon, feed, goal_id, passed):
     goal = horizon.goal_view(goal_id)
     feed.emit(
-        OutcomeEvent(kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=passed)
+        OutcomeEvent(kind="outcome.landed", task_id=goal.task_id, goal_id=goal.id, passed=passed)
     )
 
 

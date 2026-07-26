@@ -27,7 +27,7 @@ def test_pass_verdict_updates_health_and_reprioritises(tmp_path):
     )
     listener.start()
 
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=True))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=True))
 
     updated = strategy.get("g1")
     assert updated.health == "on_track"
@@ -42,7 +42,7 @@ def test_fail_verdict_bumps_score_and_reprioritises(tmp_path):
     )
     listener.start()
 
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=False))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=False))
 
     updated = strategy.get("g1")
     assert updated.health == "blocked"  # no prior pass
@@ -57,7 +57,7 @@ def test_non_verdict_events_are_ignored(tmp_path):
     listener.start()
 
     feed.emit(OutcomeEvent(kind="run.done", task_id="task_1", goal_id="g1", passed=True))
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=None))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=None))
 
     assert strategy.get("g1").health == "unknown"
     assert listener.handled == 0
@@ -69,7 +69,7 @@ def test_outcome_for_unknown_goal_is_ignored(tmp_path):
     )
     listener.start()
 
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_x", goal_id="other", passed=True))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_x", goal_id="other", passed=True))
 
     assert listener.handled == 0
 
@@ -81,7 +81,7 @@ def test_stop_unsubscribes(tmp_path):
     listener.start()
     listener.stop()
 
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=True))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=True))
 
     assert listener.handled == 0
     assert strategy.get("g1").health == "unknown"
@@ -97,11 +97,11 @@ def test_counters_classify_every_event(tmp_path):
     feed.emit(OutcomeEvent(kind="run.tool_use", task_id="task_1", goal_id="g1"))
     feed.emit(OutcomeEvent(kind="run.done", task_id="task_1", goal_id="g1"))
     # verdict-kind but no pass/fail yet (needs-changes) -> deferred
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=None))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=None))
     # a verdict for a goal horizon does not own -> dropped
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="tX", goal_id="other", passed=True))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="tX", goal_id="other", passed=True))
     # a real verdict -> handled
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=True))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=True))
 
     assert (listener.handled, listener.dropped, listener.deferred) == (1, 1, 1)
 
@@ -111,7 +111,7 @@ def test_pass_marks_goal_done(tmp_path):
         tmp_path, StrategyRecord(goal_id="g1", score=0.8, task_id="task_1")
     )
     listener.start()
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=True))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=True))
     assert strategy.get("g1").done is True
 
 
@@ -120,7 +120,7 @@ def test_fail_does_not_mark_done(tmp_path):
         tmp_path, StrategyRecord(goal_id="g1", score=0.6, task_id="task_1")
     )
     listener.start()
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=False))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=False))
     assert strategy.get("g1").done is False
 
 
@@ -131,16 +131,38 @@ def test_fail_flags_recovery_and_stores_diagnostic(tmp_path):
     listener.start()
     feed.emit(
         OutcomeEvent(
-            kind="run.evaluated",
+            kind="outcome.landed",
             task_id="task_1",
             goal_id="g1",
             passed=False,
+            phase="needs_rework",
             detail="evaluator reply missing <verdict> section",
         )
     )
     record = strategy.get("g1")
     assert record.needs_recovery is True
     assert "missing <verdict>" in record.last_diagnostic
+
+
+def test_terminal_fail_downranks_without_recovery(tmp_path):
+    listener, feed, strategy, _ = _wire(
+        tmp_path, StrategyRecord(goal_id="g1", score=0.6, task_id="task_1")
+    )
+    listener.start()
+    feed.emit(
+        OutcomeEvent(
+            kind="outcome.landed",
+            task_id="task_1",
+            goal_id="g1",
+            passed=False,
+            phase="terminal_fail",
+            detail="rejected by manager",
+        )
+    )
+    record = strategy.get("g1")
+    assert record.needs_recovery is False
+    assert record.done is False
+    assert record.score == 0.85
 
 
 def test_pass_clears_recovery_flag_and_diagnostic(tmp_path):
@@ -151,7 +173,7 @@ def test_pass_clears_recovery_flag_and_diagnostic(tmp_path):
         ),
     )
     listener.start()
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=True))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=True))
     record = strategy.get("g1")
     assert record.needs_recovery is False
     assert record.last_diagnostic == ""
@@ -167,9 +189,9 @@ def test_listener_survives_a_realistic_noisy_stream(tmp_path):
 
     for kind in ("run.started", "run.text", "run.tool_use", "run.tool_result", "run.text"):
         feed.emit(OutcomeEvent(kind=kind, task_id="task_1", goal_id="g1"))
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=None))
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=False))
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="task_1", goal_id="g1", passed=True))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=None))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=False))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="task_1", goal_id="g1", passed=True))
     feed.emit(OutcomeEvent(kind="run.done", task_id="task_1", goal_id="g1"))
 
     record = strategy.get("g1")
@@ -192,7 +214,7 @@ def test_team_child_pass_is_evidence_but_does_not_finish_goal(tmp_path):
     )
     listener.start()
 
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="child-1", goal_id="g1", passed=True))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="child-1", goal_id="g1", passed=True))
 
     record = strategy.get("g1")
     assert record.done is False
@@ -236,10 +258,32 @@ def test_duplicate_team_verdict_is_not_counted_or_prioritised_twice(tmp_path):
         ),
     )
     listener.start()
-    event = OutcomeEvent(kind="run.evaluated", task_id="child-1", goal_id="g1", passed=False)
+    event = OutcomeEvent(kind="outcome.landed", task_id="child-1", goal_id="g1", passed=False)
 
     feed.emit(event)
     feed.emit(event)
 
     record = strategy.get("g1")
     assert (record.fails, record.score, listener.handled) == (1, 0.45, 1)
+
+
+def test_delegated_outcome_is_deferred_not_recovery(tmp_path):
+    listener, feed, strategy, _ = _wire(
+        tmp_path, StrategyRecord(goal_id="g1", score=0.8, task_id="task_1")
+    )
+    listener.start()
+    feed.emit(
+        OutcomeEvent(
+            kind="outcome.landed",
+            task_id="task_1",
+            goal_id="g1",
+            passed=None,
+            phase="delegated",
+            recovery_hint="wait_for_children",
+        )
+    )
+    record = strategy.get("g1")
+    assert record.needs_recovery is False
+    assert record.done is False
+    assert listener.deferred == 1
+    assert listener.handled == 0

@@ -1,9 +1,9 @@
 """The OutcomeListener — close the loop: landed DoD verdict -> health + re-score -> re-priority.
 
-Subscribes to the ``OutcomeFeed`` and, for each event that carries a DoD verdict (``run.evaluated`` with
-``passed`` set) for a goal horizon owns, folds it into the goal's ``StrategyRecord`` (via the health
-model) and re-prioritises the goal's task. Read-only w.r.t. chorus's schedule — horizon never dispatches;
-it only writes ``task.priority`` through the port.
+Subscribes to the ``OutcomeFeed`` and, for each ``outcome.landed`` event with a pass/fail verdict
+for a goal horizon owns, folds it into the goal's ``StrategyRecord`` (via the health model) and
+re-prioritises the goal's task. ``needs_recovery`` is set only when ``phase == needs_rework``.
+Read-only w.r.t. chorus's schedule — horizon never dispatches; it only writes ``task.priority``.
 """
 
 from __future__ import annotations
@@ -18,9 +18,8 @@ from horizon.model._strategy import StrategyRecord
 from horizon.ports import OutcomeEvent, OutcomeFeed
 from horizon.store import StrategyStore
 
-# The event kinds that carry a landed DoD verdict horizon reacts to (chorus RUN_EVALUATED). chorus never
-# emits TASK_STATUS on the bus and run.done carries no verdict, so this is the one authoritative signal.
-_VERDICT_KINDS = frozenset({"run.evaluated"})
+# Authoritative strategy verdict — outcome.landed only (RUN_EVALUATED / RUN_DONE stay off this feed).
+_VERDICT_KINDS = frozenset({"outcome.landed"})
 _TEAM_OUTCOME_KINDS = _VERDICT_KINDS | {"task.status", "recovery.escalated"}
 
 # An observer called after each folded verdict with (event, record_before, record_after) — for reports.
@@ -84,7 +83,7 @@ class OutcomeListener:
         if event.kind not in _VERDICT_KINDS:
             return
         if event.passed is None:
-            self.deferred += 1  # a verdict-kind event with no pass/fail yet (e.g. needs-changes)
+            self.deferred += 1  # delegated / stranded / cancelled — not a solo pass/fail fold
             return
         before = replace(record)
         apply_outcome(record, passed=event.passed, policy=self._policy)
@@ -93,8 +92,8 @@ class OutcomeListener:
             record.needs_recovery = False
             record.last_diagnostic = ""
         else:
-            # a terminal failure — flag it for a diagnostic-carrying retry and store WHY on the node
-            record.needs_recovery = True
+            # Locked: recovery only for needs_rework — terminal_fail downranks without recover()
+            record.needs_recovery = event.phase == "needs_rework"
             record.last_diagnostic = event.detail or record.last_diagnostic
         self._strategy.put(record)
         self.handled += 1

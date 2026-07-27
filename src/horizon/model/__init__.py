@@ -7,8 +7,23 @@ These are horizon-native. The seam DTO :class:`dream.contracts.GoalNode` is the 
 from __future__ import annotations
 
 from horizon.model._decision import Decision
+from horizon.model._digest import (
+    DecisionDigest,
+    GoalDigest,
+    RealityDigest,
+    build_reality_digest,
+)
 from horizon.model._goal import Goal
 from horizon.model._state import DecisionState
 from horizon.model._strategy import StrategyRecord
 
-__all__ = ["Decision", "DecisionState", "Goal", "StrategyRecord"]
+__all__ = [
+    "Decision",
+    "DecisionDigest",
+    "DecisionState",
+    "Goal",
+    "GoalDigest",
+    "RealityDigest",
+    "StrategyRecord",
+    "build_reality_digest",
+]

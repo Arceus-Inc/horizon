@@ -16,9 +16,10 @@ from collections.abc import Callable
 from datetime import datetime
 
 from horizon._ids import mint_id
-from horizon.errors import HorizonError, UnknownDecision, UnknownGoal
+from horizon.errors import HorizonError, RoadmapError, UnknownDecision, UnknownGoal
 from horizon.feedback._health import HealthPolicy, staleness_health
 from horizon.feedback._listener import Observer, OutcomeListener
+from horizon.feedback._replan import ReplanSignal, detect_replan
 from horizon.generation import (
     Analyst,
     Approvals,
@@ -36,11 +37,13 @@ from horizon.intake._fingerprint import fingerprint
 from horizon.intake._prioritiser import Prioritiser, ScorePolicy
 from horizon.intake._submitter import Submitter
 from horizon.model import Decision, Goal, StrategyRecord
+from horizon.model._digest import RealityDigest, build_reality_digest
 from horizon.model._state import DecisionState
 from horizon.planning._authoring import author_goals
 from horizon.planning._decomposer import Decomposer
 from horizon.planning._effective_priority import EffectivePriorityPolicy, EffectiveResult
 from horizon.planning._reasoner import Reasoner
+from horizon.planning._roadmap import validate_roadmap
 from horizon.ports import (
     CapacityPort,
     DelegatedIntakePort,
@@ -151,6 +154,65 @@ class Horizon:
         """Persist a (horizon-native) decision — the top of the spine."""
         return self._decisions.put(decision)
 
+    def propose_roadmap(
+        self,
+        statement: str,
+        specs: list[dict[str, object]],
+        *,
+        owner: str | None = None,
+        rationale: str = "",
+    ) -> Decision:
+        """Author a CEO-reasoned roadmap deterministically: seed a *proposed* decision + its goals.
+
+        The ledger's LLM-free accept-path (the deterministic mirror of :meth:`decompose`). It enforces
+        the STRUCTURAL invariants (defense in depth — see :func:`horizon.planning._roadmap.validate_roadmap`)
+        *before* writing anything, seeds a ``proposed`` decision carrying the CEO's ``rationale``, and
+        authors the goals via the shared :func:`author_goals` writer. It is **author-only**: nothing
+        reaches the intake port here — submission stays with :meth:`submit_decision` / on approval.
+        Requires no reasoner. Raises :class:`~horizon.errors.RoadmapError` (leaving no partial writes)
+        on any structural breach.
+        """
+        done_titles = [record.title for record in self._strategy.all() if record.done and record.title]
+        validated = validate_roadmap(specs, done_titles=done_titles)
+        decision = Decision(
+            id=mint_id("dec"),
+            statement=statement,
+            status="proposed",
+            owner=owner,
+            rationale=rationale,
+        )
+        self._decisions.put(decision)
+        author_goals(
+            decision,
+            validated,
+            goals=self._goals,
+            strategy=self._strategy,
+            decisions=self._decisions,
+        )
+        return decision
+
+    def approve_roadmap(self, decision_id: str) -> list[str | StaffingBlocked]:
+        """Approve a CEO-proposed roadmap: submit every goal to the workforce + activate the decision.
+
+        The approval door's verb (the counterpart of :meth:`propose_roadmap`, which is author-only). It
+        submits the decision's goals through the intake port (idempotent — the submitter fingerprints
+        each goal and skips one already realized) and flips the decision ``proposed -> active``. A
+        re-approve is a safe no-op. Raises :class:`~horizon.errors.UnknownDecision` for a missing id and
+        :class:`~horizon.errors.RoadmapError` for a decision that is already ``done``/``archived``.
+        """
+        decision = self._decisions.get(decision_id)
+        if decision is None:
+            raise UnknownDecision(decision_id)
+        if decision.status not in ("proposed", "active"):
+            raise RoadmapError(
+                f"decision {decision_id} is {decision.status!r}, not an approvable roadmap"
+            )
+        task_ids = self.submit_decision(decision_id)
+        if decision.status != "active":
+            decision.status = "active"
+            self._decisions.put(decision)
+        return task_ids
+
     def adopt_goal(
         self,
         goal_id: str,
@@ -192,6 +254,13 @@ class Horizon:
             )
         if goal_id not in decision.goal_ids:
             decision.goal_ids = [*decision.goal_ids, goal_id]
+            self._decisions.put(decision)
+        # Adopting a goal under a decision is a commitment to execute it: a still-``proposed`` decision
+        # becomes formally ``active`` the moment real work is adopted beneath it, so the company never
+        # runs goals under an un-adopted (merely proposed) decision. (``approve_roadmap`` activates the
+        # same way when it submits; this covers the adopt-external-goal path podium uses.)
+        if decision.status == "proposed":
+            decision.status = "active"
             self._decisions.put(decision)
         return self.goal_view(goal_id)
 
@@ -397,13 +466,19 @@ class Horizon:
     def note_outcome(self, goal_id: str, *, passed: bool, diagnostic: str = "") -> None:
         """Record a terminal outcome that did NOT arrive as a bus verdict (e.g. a beat that errored).
 
-        chorus only publishes a verdict on ``run.evaluated``; a beat that errors in the evaluate phase
+        chorus only publishes a verdict on ``outcome.landed``; a beat that errors in the evaluate phase
         (a missing-verdict blip) leaves the task blocked with no bus signal. The composition root, which
         can read the ledger, calls this with the diagnostic it found so the failure still flows through
         the same fold — health/score/priority + the stored ``last_diagnostic`` all update uniformly.
         """
         self._listener.on_event(
-            OutcomeEvent(kind="run.evaluated", goal_id=goal_id, passed=passed, detail=diagnostic)
+            OutcomeEvent(
+                kind="outcome.landed",
+                goal_id=goal_id,
+                passed=passed,
+                phase="terminal_pass" if passed else "needs_rework",
+                detail=diagnostic,
+            )
         )
 
     def recover(self, *, max_attempts: int = 3) -> list[str]:
@@ -531,3 +606,24 @@ class Horizon:
             ]
             states.append(DecisionState(decision=decision, goals=goals))
         return states
+
+    def digest(self) -> RealityDigest:
+        """The deterministic reality digest the CEO plans against — no LLM.
+
+        A bounded snapshot assembled from the read model (:meth:`state`, minus archived decisions) plus
+        the optional :class:`~horizon.ports.CapacityPort` snapshot: goals grouped done / blocked /
+        in_flight, a per-decision summary, a health histogram, and capacity by profession (degrading to
+        ``capacity_available=False`` when no capacity port is wired).
+        """
+        live = [state for state in self.state() if state.decision.status != "archived"]
+        capacity = self._capacity.snapshot() if self._capacity is not None else None
+        return build_reality_digest(live, capacity=capacity)
+
+    def detect_replan(self) -> ReplanSignal:
+        """The deterministic re-plan signal (no LLM): should the CEO be woken to re-plan, and why.
+
+        Folds the live reality digest (:meth:`digest`) through
+        :func:`horizon.feedback._replan.detect_replan`. horizon never dispatches — the consumer turns a
+        firing signal into a CEO wake, deduping so it does not re-wake while a re-plan is pending.
+        """
+        return detect_replan(self.digest())

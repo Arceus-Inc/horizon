@@ -19,6 +19,15 @@ class DecompositionError(HorizonError):
     """Raised when the LLM decomposition output cannot be parsed into at least one valid goal."""
 
 
+class RoadmapError(HorizonError):
+    """Raised when a proposed roadmap breaches a structural invariant (the ledger's accept-path guard).
+
+    Structural = non-empty title, metric + target present, score in [0, 1], acyclic ``depends_on`` when
+    present, and no goal duplicating already-done work. Profession/catalog checks live in the chorus
+    ``roadmap_propose`` tool, not here.
+    """
+
+
 class UnknownProposal(HorizonError):
     """Raised when a proposal id is not found in the store."""
 

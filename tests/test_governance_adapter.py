@@ -197,3 +197,102 @@ def test_read_direction_projects_team_execution_and_effective_priority(tmp_path)
     assert goal.task_outcomes == {"child-1": "passed"}
     assert (goal.effective_score, goal.effective_priority) == (0.8, "high")
     assert "capacity snapshot unavailable" in goal.priority_reason
+
+
+# -- B1: the roadmap pen + capacity in the read (one-mind-one-ledger) ----------------------------
+
+
+class _FakeCapacityPort:
+    def __init__(self, snapshot):
+        self._snapshot = tuple(snapshot)
+
+    def snapshot(self):
+        return self._snapshot
+
+
+def _roadmap_spec(title, *, score=0.6, **extra):
+    base = {"title": title, "metric": "shipped", "target": "v1", "score": score}
+    base.update(extra)
+    return base
+
+
+def test_propose_roadmap_through_the_port_authors_a_proposed_decision(tmp_path) -> None:
+    horizon = _horizon(tmp_path)
+    gov = HorizonGovernance(horizon)
+
+    dec_id = gov.propose_roadmap(
+        "Ship the calm suite",
+        [_roadmap_spec("Notes app"), _roadmap_spec("Timer")],
+        by="ceo",
+    )
+
+    # a real, readable proposed decision with its authored goals — author-only (nothing submitted)
+    assert isinstance(dec_id, str) and dec_id
+    view = gov.read_direction()
+    decision = next(d for d in view.decisions if d.decision_id == dec_id)
+    assert decision.status == "proposed"
+    assert {g.title for g in decision.goals} == {"Notes app", "Timer"}
+
+
+def test_propose_roadmap_propagates_structural_rejections(tmp_path) -> None:
+    gov = HorizonGovernance(_horizon(tmp_path))
+    with pytest.raises(Exception):  # blank title breaches a structural invariant in the ledger
+        gov.propose_roadmap("Mission", [_roadmap_spec("   ")], by="ceo")
+
+
+def test_approve_roadmap_through_the_port_submits_and_activates(tmp_path) -> None:
+    horizon = _horizon(tmp_path)
+    gov = HorizonGovernance(horizon)
+    dec_id = gov.propose_roadmap(
+        "Ship the suite", [_roadmap_spec("Notes"), _roadmap_spec("Timer")], by="ceo"
+    )
+    # proposed + author-only until the approval door acts
+    assert next(d for d in gov.read_direction().decisions if d.decision_id == dec_id).status == (
+        "proposed"
+    )
+
+    returned = gov.approve_roadmap(dec_id, by="ceo")
+
+    assert returned == dec_id
+    active = next(d for d in gov.read_direction().decisions if d.decision_id == dec_id)
+    assert active.status == "active"  # promoted; its goals are now submitted to the workforce
+
+
+def test_approve_roadmap_through_the_port_is_idempotent(tmp_path) -> None:
+    horizon = _horizon(tmp_path)
+    gov = HorizonGovernance(horizon)
+    dec_id = gov.propose_roadmap("Ship", [_roadmap_spec("Notes")], by="ceo")
+    gov.approve_roadmap(dec_id, by="ceo")
+    assert gov.approve_roadmap(dec_id, by="ceo") == dec_id  # re-approve: no raise
+
+
+def test_read_direction_carries_no_capacity_without_a_port(tmp_path) -> None:
+    gov = HorizonGovernance(_horizon(tmp_path))
+    assert gov.read_direction().capacity == ()
+
+
+def test_read_direction_carries_the_capacity_snapshot_when_wired(tmp_path) -> None:
+    from dream.contracts import ProfessionCapacity
+
+    snap = (
+        ProfessionCapacity(
+            profession="frontend_engineer",
+            eligible=3,
+            running=1,
+            assigned_nonterminal=2,
+            queued_wakes=0,
+            budget_blocked=0,
+            budget_headroom_cents=50_000,
+        ),
+    )
+    horizon = Horizon(
+        goals=FakeGoalStore(),
+        intake=FakeIntakePort(),
+        outcomes=FakeOutcomeFeed(),
+        capacity=_FakeCapacityPort(snap),
+        decisions=DecisionStore(tmp_path / "d.json"),
+        strategy=StrategyStore(tmp_path / "s.json"),
+        default_assignee="moe",
+    )
+    assert HorizonGovernance(horizon).read_direction().capacity == snap
+

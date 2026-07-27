@@ -244,7 +244,7 @@ def test_start_then_failed_outcome_updates_state_and_priority(tmp_path):
 
     goal = horizon.state()[0].goals[0]
     feed.emit(
-        OutcomeEvent(kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=False)
+        OutcomeEvent(kind="outcome.landed", task_id=goal.task_id, goal_id=goal.id, passed=False)
     )
 
     after = horizon.state()[0].goals[0]
@@ -263,7 +263,7 @@ def test_passing_outcome_marks_goal_done_in_state(tmp_path):
 
     goal = horizon.state()[0].goals[0]
     feed.emit(
-        OutcomeEvent(kind="run.evaluated", task_id=goal.task_id, goal_id=goal.id, passed=True)
+        OutcomeEvent(kind="outcome.landed", task_id=goal.task_id, goal_id=goal.id, passed=True)
     )
 
     assert horizon.state()[0].goals[0].status == "done"
@@ -299,10 +299,11 @@ def test_recover_resubmits_failed_goal_with_diagnostic(tmp_path):
 
     feed.emit(
         OutcomeEvent(
-            kind="run.evaluated",
+            kind="outcome.landed",
             task_id=goal.task_id,
             goal_id=goal.id,
             passed=False,
+            phase="needs_rework",
             detail="evaluator reply missing <verdict> section",
         )
     )
@@ -325,10 +326,11 @@ def test_recover_respects_max_attempts(tmp_path):
         goal = horizon.state()[0].goals[0]
         feed.emit(
             OutcomeEvent(
-                kind="run.evaluated",
+                kind="outcome.landed",
                 task_id=goal.task_id,
                 goal_id=goal.id,
                 passed=False,
+                phase="needs_rework",
                 detail="nope",
             )
         )
@@ -413,10 +415,11 @@ def test_recover_new_task_identity_survives_store_round_trip(tmp_path):
 
     feed.emit(
         OutcomeEvent(
-            kind="run.evaluated",
+            kind="outcome.landed",
             task_id=original_task,
             goal_id=goal.id,
             passed=False,
+            phase="needs_rework",
             detail="boom",
         )
     )
@@ -430,7 +433,7 @@ def test_recover_new_task_identity_survives_store_round_trip(tmp_path):
     # And the retry is the goal's new root: its passing outcome completes the goal.
     feed.emit(
         OutcomeEvent(
-            kind="run.evaluated",
+            kind="outcome.landed",
             task_id=refreshed.task_id,
             goal_id=goal.id,
             passed=True,
@@ -463,7 +466,7 @@ def test_adopt_goal_mirrors_an_external_goal_and_folds_its_outcomes(tmp_path):
 
     # The listener now has a strategy record to fold a landed verdict into.
     horizon.start()
-    feed.emit(OutcomeEvent(kind="run.evaluated", task_id="t1", goal_id="chorus-root", passed=True))
+    feed.emit(OutcomeEvent(kind="outcome.landed", task_id="t1", goal_id="chorus-root", passed=True))
     assert horizon.listener_stats()["handled"] == 1
     assert next(g for g in horizon.state()[0].goals if g.id == "chorus-root").health == "on_track"
 
@@ -476,3 +479,18 @@ def test_adopt_goal_unknown_goal_returns_none(tmp_path):
     horizon, _goals, _intake, _feed = _horizon(tmp_path, "{}")
     horizon.seed_decision(Decision(id="dec-x", statement="x"))
     assert horizon.adopt_goal("nope", decision_id="dec-x") is None
+
+
+def test_adopt_goal_activates_a_still_proposed_decision(tmp_path):
+    """Adopting real work under a decision is a commitment to execute it: a merely ``proposed`` decision
+    must become formally ``active`` so the company never runs goals beneath an un-adopted decision."""
+    horizon, goals, _intake, _feed = _horizon(tmp_path, "{}")
+    goals.upsert(GoalNode(id="chorus-root", title="Build an AI note-taker", level="goal"))
+    # A CEO-proposed roadmap decision starts life ``proposed`` (awaiting adoption/approval).
+    horizon.seed_decision(Decision(id="dec-road", statement="Ship the suite", status="proposed"))
+
+    horizon.adopt_goal("chorus-root", decision_id="dec-road")
+
+    stored = horizon._decisions.get("dec-road")
+    assert stored is not None and stored.status == "active"
+    assert stored.goal_ids == ["chorus-root"]

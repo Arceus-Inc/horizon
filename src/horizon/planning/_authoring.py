@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from horizon._ids import mint_id
+from horizon._ids import mint_uuid
 from horizon.model import Decision, Goal
 from horizon.model._strategy import StrategyRecord
 from horizon.ports import GoalNode, GoalStore
@@ -32,7 +32,7 @@ def author_goals(
     made: list[Goal] = []
     new_ids: list[str] = []
     for spec in specs:
-        goal_id = mint_id("goal")
+        goal_id = mint_uuid()  # canonical uuid: chorus's ``goal`` table id column is native uuid
         goals.upsert(
             GoalNode(
                 id=goal_id,

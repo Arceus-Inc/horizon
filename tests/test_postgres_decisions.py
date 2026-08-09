@@ -104,7 +104,7 @@ def _app_dsn(postgres_dsn: str) -> str:
 def test_migration_exports_the_versioned_decision_schema(postgres_dsn: str) -> None:
     _migrate(postgres_dsn)
 
-    assert [migration.id for migration in load_migrations()] == ["0001_decisions"]
+    assert [migration.id for migration in load_migrations()] == ["0001_decisions", "0002_decision_status"]
     with psycopg.connect(postgres_dsn) as admin:
         rls = admin.execute(
             "SELECT relrowsecurity, relforcerowsecurity FROM pg_class "
@@ -134,7 +134,7 @@ def test_migration_exports_the_versioned_decision_schema(postgres_dsn: str) -> N
 def test_postgres_decisions_round_trip_after_restart(postgres_dsn: str) -> None:
     _migrate(postgres_dsn)
     app_dsn = _app_dsn(postgres_dsn)
-    company_id = str(uuid4())
+    company_id = uuid4()
     decision = Decision(
         id="dec_1",
         statement="Focus the roadmap",
@@ -162,7 +162,7 @@ def test_postgres_decisions_round_trip_after_restart(postgres_dsn: str) -> None:
 def test_postgres_decisions_keep_insert_order_and_upsert_in_place(postgres_dsn: str) -> None:
     _migrate(postgres_dsn)
     app_dsn = _app_dsn(postgres_dsn)
-    connection = open_postgres_connection(app_dsn, company_id=str(uuid4()))
+    connection = open_postgres_connection(app_dsn, company_id=uuid4())
     try:
         repository = PostgresDecisionRepository(connection)
         repository.put(Decision(id="dec_2", statement="Second"))
@@ -175,11 +175,23 @@ def test_postgres_decisions_keep_insert_order_and_upsert_in_place(postgres_dsn: 
         connection.close()
 
 
+def test_postgres_decisions_reject_unknown_statuses(postgres_dsn: str) -> None:
+    _migrate(postgres_dsn)
+    app_dsn = _app_dsn(postgres_dsn)
+    connection = open_postgres_connection(app_dsn, company_id=uuid4())
+    try:
+        repository = PostgresDecisionRepository(connection)
+        with pytest.raises(psycopg.errors.CheckViolation):
+            repository.put(Decision(id="dec_invalid", statement="Invalid", status="unknown"))
+    finally:
+        connection.close()
+
+
 def test_postgres_decisions_are_isolated_by_company_guc(postgres_dsn: str) -> None:
     _migrate(postgres_dsn)
     app_dsn = _app_dsn(postgres_dsn)
-    connection_a = open_postgres_connection(app_dsn, company_id=str(uuid4()))
-    connection_b = open_postgres_connection(app_dsn, company_id=str(uuid4()))
+    connection_a = open_postgres_connection(app_dsn, company_id=uuid4())
+    connection_b = open_postgres_connection(app_dsn, company_id=uuid4())
     try:
         repository_a = PostgresDecisionRepository(connection_a)
         repository_b = PostgresDecisionRepository(connection_b)

@@ -8,8 +8,9 @@ proposal repositories; application connections are separately opened with Chorus
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from importlib.resources import files
+from uuid import UUID
 
 import psycopg
 from psycopg import Connection
@@ -33,13 +34,12 @@ class Migration:
     """One immutable Horizon schema delta."""
 
     id: str
-    sql: str = field(repr=False)
-    checksum: str = ""
+    sql: str
 
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "checksum", hashlib.sha256(self.sql.encode("utf-8")).hexdigest()
-        )
+    @property
+    def checksum(self) -> str:
+        """The immutable migration contents' checksum."""
+        return hashlib.sha256(self.sql.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -80,12 +80,12 @@ def load_migrations() -> list[Migration]:
 
 
 def open_postgres_connection(
-    dsn: str, *, company_id: str
+    dsn: str, *, company_id: UUID
 ) -> Connection[tuple[object, ...]]:
     """Open one application connection pinned to a company for FORCE RLS."""
     connection: Connection[tuple[object, ...]] = psycopg.connect(dsn, autocommit=True)
     connection.execute("SET TIME ZONE 'UTC'")
-    connection.execute("SELECT set_config('app.company_id', %s, false)", (company_id,))
+    connection.execute("SELECT set_config('app.company_id', %s, false)", (str(company_id),))
     return connection
 
 

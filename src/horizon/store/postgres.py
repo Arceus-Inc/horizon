@@ -27,6 +27,7 @@ _MIGRATIONS_TABLE = "horizon_schema_migrations"
 _UTC_RFC3339_TIMESTAMP = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$"
 )
+_CREATE_TABLE = re.compile(r"^CREATE TABLE ([A-Za-z_][A-Za-z0-9_]*)\s*\(", re.IGNORECASE)
 
 
 class MigrationAheadError(RuntimeError):
@@ -48,6 +49,16 @@ class Migration:
     def checksum(self) -> str:
         """The immutable migration contents' checksum."""
         return hashlib.sha256(self.sql.encode("utf-8")).hexdigest()
+
+    def statements(self) -> list[str]:
+        """Executable SQL statements, preserving the raw SQL used by ``checksum``."""
+        without_comments = "\n".join(line.split("--", 1)[0] for line in self.sql.splitlines())
+        return [statement.strip() for statement in without_comments.split(";") if statement.strip()]
+
+    def table_names(self) -> list[str]:
+        """Tables created by this migration, in statement order for least-privilege grants."""
+        matches = (_CREATE_TABLE.match(statement) for statement in self.statements())
+        return [match.group(1) for match in matches if match is not None]
 
 
 @dataclass(frozen=True)

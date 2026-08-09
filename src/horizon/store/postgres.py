@@ -8,8 +8,9 @@ proposal repositories; application connections are separately opened with Chorus
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from importlib.resources import files
 from typing import Literal
 from uuid import UUID
@@ -22,6 +23,9 @@ from psycopg.rows import class_row
 from horizon.model import Decision, StrategyRecord
 
 _MIGRATIONS_TABLE = "horizon_schema_migrations"
+_UTC_RFC3339_TIMESTAMP = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$"
+)
 
 
 class MigrationAheadError(RuntimeError):
@@ -132,6 +136,19 @@ class _StaffingRequirementRow:
     count: int
     coverage: Literal["direct", "subtree"]
     outcome_area: str | None
+
+
+def _parse_utc_rfc3339_timestamp(value: str | None) -> datetime | None:
+    """Parse Horizon's UTC RFC3339 timestamp without PostgreSQL timezone coercion."""
+    if value is None:
+        return None
+    if _UTC_RFC3339_TIMESTAMP.fullmatch(value) is None:
+        raise ValueError("last_outcome_at must be a UTC RFC3339 timestamp")
+    try:
+        timestamp = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError("last_outcome_at must be a UTC RFC3339 timestamp") from error
+    return timestamp.astimezone(UTC)
 
 
 def load_migrations() -> list[Migration]:
@@ -252,11 +269,7 @@ class PostgresStrategyRepository:
         return self._record_from_row(row) if row is not None else None
 
     def put(self, record: StrategyRecord) -> StrategyRecord:
-        last_outcome_at = (
-            datetime.fromisoformat(record.last_outcome_at)
-            if record.last_outcome_at is not None
-            else None
-        )
+        last_outcome_at = _parse_utc_rfc3339_timestamp(record.last_outcome_at)
         with self._connection.transaction():
             self._connection.execute(
                 "INSERT INTO horizon_strategy_record ("

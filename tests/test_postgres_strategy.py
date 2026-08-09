@@ -182,6 +182,55 @@ def test_postgres_strategy_rejects_closed_vocabulary_values(postgres_dsn: str) -
         connection.close()
 
 
+@pytest.mark.parametrize(
+    "record",
+    [
+        pytest.param(replace(_record("goal_score"), score=-0.1), id="score-below-range"),
+        pytest.param(replace(_record("goal_score_high"), score=1.1), id="score-above-range"),
+        pytest.param(replace(_record("goal_passes"), passes=-1), id="negative-passes"),
+        pytest.param(replace(_record("goal_fails"), fails=-1), id="negative-fails"),
+        pytest.param(replace(_record("goal_attempts"), attempts=-1), id="negative-attempts"),
+        pytest.param(
+            replace(_record("goal_revision"), task_outcome_revisions={"task_root": -1}),
+            id="negative-task-outcome-revision",
+        ),
+    ],
+)
+def test_postgres_strategy_rejects_domain_invariant_violations(
+    postgres_dsn: str, record: StrategyRecord
+) -> None:
+    _migrate(postgres_dsn)
+    connection = open_postgres_connection(_app_dsn(postgres_dsn), company_id=uuid4())
+    try:
+        repository = PostgresStrategyRepository(connection)
+        with pytest.raises(psycopg.errors.CheckViolation):
+            repository.put(record)
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    "last_outcome_at",
+    [
+        pytest.param("2026-08-09T10:11:12", id="naive"),
+        pytest.param("2026-08-09T10:11:12+05:30", id="non-utc"),
+    ],
+)
+def test_postgres_strategy_rejects_non_utc_timestamps_at_its_boundary(
+    postgres_dsn: str, last_outcome_at: str
+) -> None:
+    _migrate(postgres_dsn)
+    connection = open_postgres_connection(_app_dsn(postgres_dsn), company_id=uuid4())
+    try:
+        repository = PostgresStrategyRepository(connection)
+        with pytest.raises(ValueError, match="UTC RFC3339"):
+            repository.put(
+                StrategyRecord(goal_id="goal_timestamp", last_outcome_at=last_outcome_at)
+            )
+    finally:
+        connection.close()
+
+
 def test_postgres_strategy_is_isolated_by_company_guc(postgres_dsn: str) -> None:
     _migrate(postgres_dsn)
     app_dsn = _app_dsn(postgres_dsn)

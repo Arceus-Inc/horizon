@@ -23,6 +23,9 @@ CREATE TABLE horizon_strategy_record (
     last_diagnostic text NOT NULL DEFAULT '',
     position bigint GENERATED ALWAYS AS IDENTITY,
     PRIMARY KEY (company_id, goal_id),
+    CONSTRAINT horizon_strategy_record_score_check CHECK (score BETWEEN 0 AND 1),
+    CONSTRAINT horizon_strategy_record_counters_check
+        CHECK (passes >= 0 AND fails >= 0 AND attempts >= 0),
     CONSTRAINT horizon_strategy_record_health_check
         CHECK (health IN ('on_track', 'drifting', 'blocked', 'unknown')),
     CONSTRAINT horizon_strategy_record_delivery_shape_check
@@ -57,7 +60,9 @@ CREATE TABLE horizon_strategy_task_outcome (
     revision integer,
     PRIMARY KEY (company_id, goal_id, task_id),
     FOREIGN KEY (company_id, goal_id)
-        REFERENCES horizon_strategy_record (company_id, goal_id) ON DELETE CASCADE
+        REFERENCES horizon_strategy_record (company_id, goal_id) ON DELETE CASCADE,
+    CONSTRAINT horizon_strategy_task_outcome_revision_check
+        CHECK (revision IS NULL OR revision >= 0)
 );
 
 CREATE TABLE horizon_strategy_outcome_event (

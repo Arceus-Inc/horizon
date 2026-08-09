@@ -15,9 +15,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from horizon.generation._brief import DirectionBrief
-from horizon.generation._proposal import Proposal, ProposalStore, proposal_id
+from horizon.generation._proposal import Proposal, proposal_id
 from horizon.intake._fingerprint import normalize_intent
-from horizon.store._decision_store import DecisionStore
+from horizon.ports import DecisionRepository, ProposalRepository
 
 
 def _now_iso() -> str:
@@ -30,8 +30,8 @@ class Reconciler:
     def __init__(
         self,
         *,
-        proposals: ProposalStore,
-        decisions: DecisionStore | None = None,
+        proposals: ProposalRepository,
+        decisions: DecisionRepository | None = None,
         now: Callable[[], str] = _now_iso,
     ) -> None:
         self._proposals = proposals

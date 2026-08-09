@@ -46,6 +46,7 @@ from horizon.planning._reasoner import Reasoner
 from horizon.planning._roadmap import validate_roadmap
 from horizon.ports import (
     CapacityPort,
+    DecisionRepository,
     DelegatedIntakePort,
     DelegatedWorkRef,
     GoalNode,
@@ -53,7 +54,9 @@ from horizon.ports import (
     IntakePort,
     OutcomeEvent,
     OutcomeFeed,
+    ProposalRepository,
     StaffingBlocked,
+    StrategyRepository,
 )
 from horizon.reporting import LoopReporter
 from horizon.store import DecisionStore, StrategyStore
@@ -71,8 +74,8 @@ class Horizon:
         capacity: CapacityPort | None = None,
         outcomes: OutcomeFeed,
         reasoner: Reasoner | None = None,
-        decisions: DecisionStore | None = None,
-        strategy: StrategyStore | None = None,
+        decisions: DecisionRepository | None = None,
+        strategy: StrategyRepository | None = None,
         default_assignee: str | None = None,
         score_policy: ScorePolicy | None = None,
         effective_priority_policy: EffectivePriorityPolicy | None = None,
@@ -80,14 +83,14 @@ class Horizon:
         outcome_observer: Observer | None = None,
         model: str | None = None,
         decompose_context: str | None = None,
-        proposals: ProposalStore | None = None,
+        proposals: ProposalRepository | None = None,
     ) -> None:
         self._goals = goals
         self._intake = intake
         self._outcomes = outcomes
-        self._decisions = decisions or DecisionStore()
-        self._strategy = strategy or StrategyStore()
-        self._proposals = proposals or ProposalStore()
+        self._decisions: DecisionRepository = decisions or DecisionStore()
+        self._strategy: StrategyRepository = strategy or StrategyStore()
+        self._proposals: ProposalRepository = proposals or ProposalStore()
         self._score_policy = score_policy or ScorePolicy()
         self._capacity = capacity
         self._effective_priority_policy = effective_priority_policy or EffectivePriorityPolicy(

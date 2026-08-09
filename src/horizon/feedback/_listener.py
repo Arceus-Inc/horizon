@@ -15,8 +15,7 @@ from horizon.feedback._fold import OutcomeFold
 from horizon.feedback._health import HealthPolicy, apply_outcome
 from horizon.intake._prioritiser import Prioritiser
 from horizon.model._strategy import StrategyRecord
-from horizon.ports import OutcomeEvent, OutcomeFeed
-from horizon.store import StrategyStore
+from horizon.ports import OutcomeEvent, OutcomeFeed, StrategyRepository
 
 # Authoritative strategy verdict — outcome.landed only (RUN_EVALUATED / RUN_DONE stay off this feed).
 _VERDICT_KINDS = frozenset({"outcome.landed"})
@@ -40,7 +39,7 @@ class OutcomeListener:
         self,
         *,
         outcomes: OutcomeFeed,
-        strategy: StrategyStore,
+        strategy: StrategyRepository,
         prioritiser: Prioritiser,
         policy: HealthPolicy | None = None,
         observer: Observer | None = None,

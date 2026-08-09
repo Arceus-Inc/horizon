@@ -10,11 +10,23 @@ Lands in M2: ``_decomposer.py``.
 
 from __future__ import annotations
 
+from horizon.planning._capability_gaps import (
+    CapabilityFailureEvidence,
+    CapabilityGap,
+    CapabilityGapDetector,
+    CapabilityGapPolicy,
+    CapabilitySeverity,
+)
 from horizon.planning._decomposer import Decomposer
 from horizon.planning._effective_priority import EffectivePriorityPolicy, EffectiveResult
 from horizon.planning._reasoner import CompletionResult, Reasoner
 
 __all__ = [
+    "CapabilityFailureEvidence",
+    "CapabilityGap",
+    "CapabilityGapDetector",
+    "CapabilityGapPolicy",
+    "CapabilitySeverity",
     "CompletionResult",
     "Decomposer",
     "EffectivePriorityPolicy",

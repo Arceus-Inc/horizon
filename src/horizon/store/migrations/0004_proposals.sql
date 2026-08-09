@@ -14,7 +14,18 @@ CREATE TABLE horizon_proposal (
     position bigint GENERATED ALWAYS AS IDENTITY,
     PRIMARY KEY (company_id, id),
     CONSTRAINT horizon_proposal_status_check
-        CHECK (status IN ('proposed', 'approved', 'rejected', 'superseded'))
+        CHECK (status IN ('proposed', 'approved', 'rejected', 'superseded')),
+    CONSTRAINT horizon_proposal_state_proof_check CHECK (
+        (status = 'approved' AND decided_by IS NOT NULL AND decided_at IS NOT NULL
+            AND linked_decision_id IS NOT NULL)
+        OR (status = 'rejected' AND decided_by IS NOT NULL AND decided_at IS NOT NULL
+            AND linked_decision_id IS NULL)
+        OR (status = 'proposed' AND decided_by IS NULL AND decided_at IS NULL
+            AND linked_decision_id IS NULL)
+        OR status = 'superseded'
+    ),
+    FOREIGN KEY (company_id, linked_decision_id)
+        REFERENCES horizon_decision (company_id, id)
 );
 
 CREATE TABLE horizon_proposal_brief (

@@ -7,10 +7,13 @@ from uuid import uuid4
 
 import psycopg
 import pytest
+from psycopg import Connection
 
 from horizon.generation import CandidateGoal, DirectionBrief, Proposal
+from horizon.model import Decision
 from horizon.ports import ProposalRepository
 from horizon.store.postgres import (
+    PostgresDecisionRepository,
     PostgresProposalRepository,
     apply_migrations,
     open_postgres_connection,
@@ -38,6 +41,9 @@ def _app_dsn(postgres_dsn: str) -> str:
             "LOGIN NOSUPERUSER NOBYPASSRLS; END IF; END $$"
         )
         admin.execute("GRANT USAGE ON SCHEMA public TO horizon_proposal_app")
+        admin.execute(
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON horizon_decision TO horizon_proposal_app"
+        )
         admin.execute(
             "GRANT SELECT, INSERT, UPDATE, DELETE ON " + ", ".join(_PROPOSAL_TABLES) + " "
             "TO horizon_proposal_app"
@@ -87,6 +93,12 @@ def _proposal(proposal_id: str = "proposal_1") -> Proposal:
     )
 
 
+def _seed_linked_decision(connection: Connection[tuple[object, ...]], decision_id: str) -> None:
+    PostgresDecisionRepository(connection).put(
+        Decision(id=decision_id, statement="A linked strategic decision")
+    )
+
+
 def test_postgres_proposals_round_trip_every_field_after_restart(postgres_dsn: str) -> None:
     _migrate(postgres_dsn)
     app_dsn = _app_dsn(postgres_dsn)
@@ -95,6 +107,8 @@ def test_postgres_proposals_round_trip_every_field_after_restart(postgres_dsn: s
 
     first_connection = open_postgres_connection(app_dsn, company_id=company_id)
     try:
+        assert proposal.linked_decision_id is not None
+        _seed_linked_decision(first_connection, proposal.linked_decision_id)
         repository: ProposalRepository = PostgresProposalRepository(first_connection)
         assert repository.put(proposal) == proposal
     finally:
@@ -115,7 +129,13 @@ def test_postgres_proposals_keep_insert_order_and_exact_upsert_behavior(postgres
         repository = PostgresProposalRepository(connection)
         second = Proposal(id="proposal_2", decision_statement="Second")
         first = Proposal(id="proposal_1", decision_statement="First")
-        updated = Proposal(id="proposal_2", status="rejected", note="Not now")
+        updated = Proposal(
+            id="proposal_2",
+            status="rejected",
+            decided_by="ceo_1",
+            decided_at="2026-08-10T10:11:12+00:00",
+            note="Not now",
+        )
 
         assert repository.put(second) is second
         assert repository.put(first) is first
@@ -153,6 +173,8 @@ def test_postgres_proposal_replacement_removes_stale_child_rows(postgres_dsn: st
 
     connection = open_postgres_connection(app_dsn, company_id=company_id)
     try:
+        assert original.linked_decision_id is not None
+        _seed_linked_decision(connection, original.linked_decision_id)
         repository = PostgresProposalRepository(connection)
         repository.put(original)
         assert repository.put(replacement) == replacement
@@ -201,6 +223,52 @@ def test_postgres_proposals_reject_domain_constraint_violations(
             PostgresProposalRepository(connection).put(proposal)
     finally:
         connection.close()
+
+
+@pytest.mark.parametrize(
+    "proposal",
+    [
+        pytest.param(Proposal(id="approved_missing_proof", status="approved"), id="approved"),
+        pytest.param(
+            Proposal(id="rejected_missing_time", status="rejected", decided_by="ceo_1"),
+            id="rejected",
+        ),
+        pytest.param(
+            Proposal(id="proposed_with_link", linked_decision_id="decision_1"),
+            id="proposed",
+        ),
+    ],
+)
+def test_postgres_proposals_require_state_proof_consistency(
+    postgres_dsn: str, proposal: Proposal
+) -> None:
+    _migrate(postgres_dsn)
+    connection = open_postgres_connection(_app_dsn(postgres_dsn), company_id=uuid4())
+    try:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            PostgresProposalRepository(connection).put(proposal)
+    finally:
+        connection.close()
+
+
+def test_postgres_proposals_reject_ghost_and_cross_company_decision_links(
+    postgres_dsn: str,
+) -> None:
+    _migrate(postgres_dsn)
+    app_dsn = _app_dsn(postgres_dsn)
+    connection_a = open_postgres_connection(app_dsn, company_id=uuid4())
+    connection_b = open_postgres_connection(app_dsn, company_id=uuid4())
+    try:
+        repository_a = PostgresProposalRepository(connection_a)
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            repository_a.put(_proposal("ghost_decision"))
+
+        _seed_linked_decision(connection_b, "decision_1")
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            repository_a.put(_proposal("cross_company_decision"))
+    finally:
+        connection_a.close()
+        connection_b.close()
 
 
 @pytest.mark.parametrize(

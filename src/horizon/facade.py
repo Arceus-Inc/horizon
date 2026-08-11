@@ -12,7 +12,7 @@ Each step is a small, independently-testable engine; the facade composes them an
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 
 from horizon._ids import mint_id
@@ -160,7 +160,7 @@ class Horizon:
     def propose_roadmap(
         self,
         statement: str,
-        specs: list[dict[str, object]],
+        specs: Sequence[Mapping[str, object]],
         *,
         owner: str | None = None,
         rationale: str = "",

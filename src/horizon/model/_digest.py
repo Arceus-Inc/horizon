@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from dream.contracts import ProfessionCapacity
 
+from horizon.model._goal import Goal
 from horizon.model._state import DecisionState
 
 
@@ -56,7 +57,7 @@ class RealityDigest:
     capacity_available: bool = False
 
 
-def _goal_digest(goal) -> GoalDigest:
+def _goal_digest(goal: Goal) -> GoalDigest:
     return GoalDigest(
         id=goal.id,
         title=goal.title,

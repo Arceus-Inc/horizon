@@ -62,6 +62,7 @@ class ProposalRepository(Protocol):
 
     def all(self) -> list[Proposal]: ...
 
+
 __all__ = [
     "CapacityPort",
     "DecisionRepository",

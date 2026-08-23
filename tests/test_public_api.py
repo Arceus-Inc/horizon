@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import ModuleType
+
 import horizon
 import horizon.feedback as feedback
 import horizon.intake as intake
@@ -11,7 +13,7 @@ import horizon.ports as ports
 import horizon.store as store
 
 
-def _all(module) -> set[str]:
+def _all(module: ModuleType) -> set[str]:
     return set(module.__all__)
 
 
@@ -53,6 +55,11 @@ def test_ports_surface_is_pinned():
 
 def test_planning_surface_is_pinned():
     assert _all(planning) == {
+        "CapabilityFailureEvidence",
+        "CapabilityGap",
+        "CapabilityGapDetector",
+        "CapabilityGapPolicy",
+        "CapabilitySeverity",
         "CompletionResult",
         "Decomposer",
         "EffectivePriorityPolicy",

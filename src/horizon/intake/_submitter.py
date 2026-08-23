@@ -12,8 +12,7 @@ from horizon.intake._fingerprint import fingerprint
 from horizon.intake._prioritiser import ScorePolicy
 from horizon.model import Goal
 from horizon.model._strategy import StrategyRecord
-from horizon.ports import IntakePort
-from horizon.store import StrategyStore
+from horizon.ports import IntakePort, StrategyRepository
 
 
 class Submitter:
@@ -23,7 +22,7 @@ class Submitter:
         self,
         *,
         intake: IntakePort,
-        strategy: StrategyStore,
+        strategy: StrategyRepository,
         default_assignee: str | None = None,
         policy: ScorePolicy | None = None,
     ) -> None:

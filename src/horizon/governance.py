@@ -10,6 +10,8 @@ delegate straight through to the facade's existing CEO levers (approve / reject 
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 from dream.contracts import (
     GovDecision,
     GovernanceView,
@@ -103,7 +105,7 @@ class HorizonGovernance:
     def propose_roadmap(
         self,
         statement: str,
-        specs,
+        specs: Sequence[Mapping[str, object]],
         *,
         by: str | None = None,
         rationale: str = "",
@@ -116,7 +118,7 @@ class HorizonGovernance:
         it as a refusal).
         """
         return self._horizon.propose_roadmap(
-            statement, list(specs), owner=by, rationale=rationale
+            statement, specs, owner=by, rationale=rationale
         ).id
 
     def approve_roadmap(self, decision_id: str, *, by: str | None = None) -> str:

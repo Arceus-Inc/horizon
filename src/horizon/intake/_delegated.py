@@ -11,8 +11,8 @@ from horizon.ports import (
     DelegatedWorkRef,
     DelegatedWorkRequest,
     StaffingBlocked,
+    StrategyRepository,
 )
-from horizon.store import StrategyStore
 
 
 class DelegatedSubmitter:
@@ -22,7 +22,7 @@ class DelegatedSubmitter:
         self,
         *,
         intake: DelegatedIntakePort,
-        strategy: StrategyStore,
+        strategy: StrategyRepository,
         policy: ScorePolicy | None = None,
     ) -> None:
         self._intake = intake

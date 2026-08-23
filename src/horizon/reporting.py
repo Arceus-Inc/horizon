@@ -14,8 +14,7 @@ from datetime import UTC, datetime
 from horizon.intake._prioritiser import ScorePolicy
 from horizon.model import Decision, DecisionState, Goal
 from horizon.model._strategy import StrategyRecord
-from horizon.ports import OutcomeEvent
-from horizon.store import DecisionStore, StrategyStore
+from horizon.ports import DecisionRepository, OutcomeEvent, StrategyRepository
 
 
 @dataclass(frozen=True)
@@ -199,7 +198,7 @@ def _execution_summary(goal: Goal) -> str:
 
 
 def direction_from_records(
-    decisions: DecisionStore, strategy: StrategyStore
+    decisions: DecisionRepository, strategy: StrategyRepository
 ) -> list[DecisionState]:
     """Build the direction read model from horizon's own stores alone (offline; uses cached titles)."""
     by_goal = {record.goal_id: record for record in strategy.all()}

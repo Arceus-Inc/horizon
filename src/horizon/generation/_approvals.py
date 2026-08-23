@@ -13,7 +13,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from horizon.errors import ProposalNotOpen, UnknownProposal
-from horizon.generation._proposal import Proposal, ProposalStore
+from horizon.generation._proposal import Proposal
+from horizon.ports import ProposalRepository
 
 PromoteFn = Callable[[Proposal], str]
 """Promote an approved proposal into the live tree; returns the created (live) decision id."""
@@ -29,7 +30,7 @@ class Approvals:
     def __init__(
         self,
         *,
-        proposals: ProposalStore,
+        proposals: ProposalRepository,
         promote: PromoteFn,
         now: Callable[[], str] = _now_iso,
     ) -> None:

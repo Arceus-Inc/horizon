@@ -21,8 +21,7 @@ from horizon.errors import DecompositionError, UnknownDecision
 from horizon.model import Decision, Goal
 from horizon.planning._authoring import author_goals
 from horizon.planning._reasoner import Reasoner
-from horizon.ports import GoalStore
-from horizon.store import DecisionStore, StrategyStore
+from horizon.ports import DecisionRepository, GoalStore, StrategyRepository
 
 _PROMPT = """You are the strategy decomposer for an autonomous software company.
 
@@ -255,8 +254,8 @@ class Decomposer:
         self,
         *,
         goals: GoalStore,
-        strategy: StrategyStore,
-        decisions: DecisionStore,
+        strategy: StrategyRepository,
+        decisions: DecisionRepository,
         reasoner: Reasoner,
         model: str | None = None,
         max_output_tokens: int = 8000,

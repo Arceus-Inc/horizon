@@ -16,8 +16,7 @@ from typing import Any
 from horizon._ids import mint_uuid
 from horizon.model import Decision, Goal
 from horizon.model._strategy import StrategyRecord
-from horizon.ports import GoalNode, GoalStore
-from horizon.store import DecisionStore, StrategyStore
+from horizon.ports import DecisionRepository, GoalNode, GoalStore, StrategyRepository
 
 
 def author_goals(
@@ -25,8 +24,8 @@ def author_goals(
     specs: Sequence[Mapping[str, Any]],
     *,
     goals: GoalStore,
-    strategy: StrategyStore,
-    decisions: DecisionStore,
+    strategy: StrategyRepository,
+    decisions: DecisionRepository,
 ) -> list[Goal]:
     """Author each spec as a live goal under ``decision``; returns the created :class:`Goal` views."""
     made: list[Goal] = []

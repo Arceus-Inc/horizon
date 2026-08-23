@@ -27,11 +27,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+postgres = [
+  "psycopg[binary]>=3.2",
+]
 dev = [
   "pytest>=8.2",
   "pytest-asyncio>=0.23",
   "ruff>=0.6",
   "mypy>=1.11",
+  "psycopg[binary]>=3.2",
   # openai backs dream's OpenAIChatSubstrate (the real Reasoner) for the composition root + live tests.
   # The SDK core depends only on the Reasoner Protocol, never on openai directly.
   "openai>=1.40",

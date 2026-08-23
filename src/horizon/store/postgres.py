@@ -20,6 +20,7 @@ from dream.contracts import StaffingRequirement
 from psycopg import Connection
 from psycopg.rows import class_row
 
+from horizon.generation import CandidateGoal, DirectionBrief, Proposal
 from horizon.model import Decision, StrategyRecord
 
 _MIGRATIONS_TABLE = "horizon_schema_migrations"
@@ -138,16 +139,61 @@ class _StaffingRequirementRow:
     outcome_area: str | None
 
 
-def _parse_utc_rfc3339_timestamp(value: str | None) -> datetime | None:
+@dataclass(frozen=True)
+class _ProposalRow:
+    id: str
+    status: str
+    decision_statement: str
+    decision_rationale: str
+    created_at: datetime | None
+    decided_by: str | None
+    decided_at: datetime | None
+    linked_decision_id: str | None
+    note: str
+
+
+@dataclass(frozen=True)
+class _ProposalBriefRow:
+    candidate_id: str
+    recommendation: str
+    rationale: str
+    confidence: float
+
+
+@dataclass(frozen=True)
+class _ProposalRiskRow:
+    position: int
+    value: str
+
+
+@dataclass(frozen=True)
+class _ProposalGoalRow:
+    position: int
+    title: str
+    metric: str
+    target: str
+    rationale: str
+    score: float
+
+
+@dataclass(frozen=True)
+class _ProposalEvidenceRefRow:
+    position: int
+    evidence_ref: str
+
+
+def _parse_utc_rfc3339_timestamp(
+    value: str | None, *, field_name: str = "last_outcome_at"
+) -> datetime | None:
     """Parse Horizon's UTC RFC3339 timestamp without PostgreSQL timezone coercion."""
     if value is None:
         return None
     if _UTC_RFC3339_TIMESTAMP.fullmatch(value) is None:
-        raise ValueError("last_outcome_at must be a UTC RFC3339 timestamp")
+        raise ValueError(f"{field_name} must be a UTC RFC3339 timestamp")
     try:
         timestamp = datetime.fromisoformat(value)
     except ValueError as error:
-        raise ValueError("last_outcome_at must be a UTC RFC3339 timestamp") from error
+        raise ValueError(f"{field_name} must be a UTC RFC3339 timestamp") from error
     return timestamp.astimezone(UTC)
 
 
@@ -479,11 +525,171 @@ class PostgresStrategyRepository:
         )
 
 
+class PostgresProposalRepository:
+    """Company-scoped, Postgres-backed implementation of Horizon's ``ProposalRepository``."""
+
+    def __init__(self, connection: Connection[tuple[object, ...]]) -> None:
+        self._connection = connection
+
+    def get(self, proposal_id: str) -> Proposal | None:
+        with self._connection.cursor(row_factory=class_row(_ProposalRow)) as cursor:
+            row = cursor.execute(
+                "SELECT id, status, decision_statement, decision_rationale, created_at, decided_by, "
+                "decided_at, linked_decision_id, note FROM horizon_proposal WHERE id = %s",
+                (proposal_id,),
+            ).fetchone()
+        return self._proposal_from_row(row) if row is not None else None
+
+    def put(self, proposal: Proposal) -> Proposal:
+        created_at = _parse_utc_rfc3339_timestamp(
+            proposal.created_at or None, field_name="created_at"
+        )
+        decided_at = _parse_utc_rfc3339_timestamp(
+            proposal.decided_at, field_name="decided_at"
+        )
+        with self._connection.transaction():
+            self._connection.execute(
+                "INSERT INTO horizon_proposal ("
+                "id, status, decision_statement, decision_rationale, created_at, decided_by, "
+                "decided_at, linked_decision_id, note) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                "ON CONFLICT (company_id, id) DO UPDATE SET "
+                "status = EXCLUDED.status, decision_statement = EXCLUDED.decision_statement, "
+                "decision_rationale = EXCLUDED.decision_rationale, created_at = EXCLUDED.created_at, "
+                "decided_by = EXCLUDED.decided_by, decided_at = EXCLUDED.decided_at, "
+                "linked_decision_id = EXCLUDED.linked_decision_id, note = EXCLUDED.note",
+                (
+                    proposal.id,
+                    proposal.status,
+                    proposal.decision_statement,
+                    proposal.decision_rationale,
+                    created_at,
+                    proposal.decided_by,
+                    decided_at,
+                    proposal.linked_decision_id,
+                    proposal.note,
+                ),
+            )
+            self._connection.execute(
+                "DELETE FROM horizon_proposal_brief WHERE proposal_id = %s", (proposal.id,)
+            )
+            if proposal.brief is not None:
+                brief = proposal.brief
+                self._connection.execute(
+                    "INSERT INTO horizon_proposal_brief ("
+                    "proposal_id, candidate_id, recommendation, rationale, confidence) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (
+                        proposal.id,
+                        brief.candidate_id,
+                        brief.recommendation,
+                        brief.rationale,
+                        brief.confidence,
+                    ),
+                )
+                for position, risk in enumerate(brief.risks):
+                    self._connection.execute(
+                        "INSERT INTO horizon_proposal_brief_risk (proposal_id, position, value) "
+                        "VALUES (%s, %s, %s)",
+                        (proposal.id, position, risk),
+                    )
+                for position, goal in enumerate(brief.candidate_goals):
+                    self._connection.execute(
+                        "INSERT INTO horizon_proposal_brief_goal ("
+                        "proposal_id, position, title, metric, target, rationale, score) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                        (
+                            proposal.id,
+                            position,
+                            goal.title,
+                            goal.metric,
+                            goal.target,
+                            goal.rationale,
+                            goal.score,
+                        ),
+                    )
+                for position, evidence_ref in enumerate(brief.evidence_refs):
+                    self._connection.execute(
+                        "INSERT INTO horizon_proposal_brief_evidence_ref ("
+                        "proposal_id, position, evidence_ref) VALUES (%s, %s, %s)",
+                        (proposal.id, position, evidence_ref),
+                    )
+        return proposal
+
+    def all(self) -> list[Proposal]:
+        with self._connection.cursor(row_factory=class_row(_ProposalRow)) as cursor:
+            rows = cursor.execute(
+                "SELECT id, status, decision_statement, decision_rationale, created_at, decided_by, "
+                "decided_at, linked_decision_id, note FROM horizon_proposal ORDER BY position"
+            ).fetchall()
+        return [self._proposal_from_row(row) for row in rows]
+
+    def _proposal_from_row(self, row: _ProposalRow) -> Proposal:
+        with self._connection.cursor(row_factory=class_row(_ProposalBriefRow)) as cursor:
+            brief_row = cursor.execute(
+                "SELECT candidate_id, recommendation, rationale, confidence "
+                "FROM horizon_proposal_brief WHERE proposal_id = %s",
+                (row.id,),
+            ).fetchone()
+        brief = self._brief_from_row(row.id, brief_row) if brief_row is not None else None
+        return Proposal(
+            id=row.id,
+            status=row.status,
+            brief=brief,
+            decision_statement=row.decision_statement,
+            decision_rationale=row.decision_rationale,
+            created_at=row.created_at.isoformat() if row.created_at is not None else "",
+            decided_by=row.decided_by,
+            decided_at=row.decided_at.isoformat() if row.decided_at is not None else None,
+            linked_decision_id=row.linked_decision_id,
+            note=row.note,
+        )
+
+    def _brief_from_row(self, proposal_id: str, row: _ProposalBriefRow) -> DirectionBrief:
+        with self._connection.cursor(row_factory=class_row(_ProposalRiskRow)) as cursor:
+            risk_rows = cursor.execute(
+                "SELECT position, value FROM horizon_proposal_brief_risk "
+                "WHERE proposal_id = %s ORDER BY position",
+                (proposal_id,),
+            ).fetchall()
+        with self._connection.cursor(row_factory=class_row(_ProposalGoalRow)) as cursor:
+            goal_rows = cursor.execute(
+                "SELECT position, title, metric, target, rationale, score "
+                "FROM horizon_proposal_brief_goal WHERE proposal_id = %s ORDER BY position",
+                (proposal_id,),
+            ).fetchall()
+        with self._connection.cursor(row_factory=class_row(_ProposalEvidenceRefRow)) as cursor:
+            evidence_ref_rows = cursor.execute(
+                "SELECT position, evidence_ref FROM horizon_proposal_brief_evidence_ref "
+                "WHERE proposal_id = %s ORDER BY position",
+                (proposal_id,),
+            ).fetchall()
+        return DirectionBrief(
+            candidate_id=row.candidate_id,
+            recommendation=row.recommendation,
+            rationale=row.rationale,
+            confidence=row.confidence,
+            risks=[risk_row.value for risk_row in risk_rows],
+            candidate_goals=[
+                CandidateGoal(
+                    title=goal_row.title,
+                    metric=goal_row.metric,
+                    target=goal_row.target,
+                    rationale=goal_row.rationale,
+                    score=goal_row.score,
+                )
+                for goal_row in goal_rows
+            ],
+            evidence_refs=[evidence_ref_row.evidence_ref for evidence_ref_row in evidence_ref_rows],
+        )
+
+
 __all__ = [
     "Migration",
     "MigrationAheadError",
     "MigrationDriftError",
     "PostgresDecisionRepository",
+    "PostgresProposalRepository",
     "PostgresStrategyRepository",
     "apply_migrations",
     "load_migrations",

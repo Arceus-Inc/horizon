@@ -40,6 +40,7 @@ def test_migration_exports_the_versioned_decision_schema(postgres_dsn: str) -> N
         "0001_decisions",
         "0002_decision_status",
         "0003_strategy_records",
+        "0004_proposals",
     ]
     with psycopg.connect(postgres_dsn) as admin:
         rls = admin.execute(
